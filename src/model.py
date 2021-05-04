@@ -458,9 +458,15 @@ class LDD(nn.Module):
         z1, z2 = zs[0], zs[1]
         bs = z1.shape[0]
         delta_z = (z2 - z1) / interval.unsqueeze(1)
-        labels = (labels > 0).type(torch.FloatTensor).to(self.gpu)
-        num_nc = (1-labels).sum() + 1e-12
-        num_dis = labels.sum() + 1e-12
+        labels_dis = (labels > 0).type(torch.FloatTensor).to(self.gpu)
+        labels_nc = (labels == 0).type(torch.FloatTensor).to(self.gpu)
+        labels_ad = (labels == 2).type(torch.FloatTensor).to(self.gpu)
+        labels_mci = (labels > 2).type(torch.FloatTensor).to(self.gpu)
+
+        num_nc = labels_nc.sum() + 1e-12
+        num_dis = labels_dis.sum() + 1e-12
+        num_mci = labels_mci.sum() + 1e-12
+        num_ad = labels_ad.sum() + 1e-12
 
         # define directions
         da_vec = self.aging_direction(torch.ones(bs, 1).to(self.gpu))   # (1024,)
@@ -474,7 +480,10 @@ class LDD(nn.Module):
         da_vec_norm = torch.norm(da_vec, dim=1) + 1e-12
         delta_z_norm = torch.norm(delta_z, dim=1) + 1e-12
         cos_da = torch.sum(delta_z * da_vec, 1) / (delta_z_norm * da_vec_norm)
-        loss_da = (1 - cos_da) * (1 - labels)
+        loss_da = (1 - cos_da) * labels_nc
+        loss_da = loss_da.sum() / num_nc
+
+        mode = 3        # 1: use one dis, 2: only use ad, 3: use 3 dis groups
 
         # disease direction
         dd_vec_norm = torch.norm(dd_vec, dim=1) + 1e-12
@@ -483,22 +492,53 @@ class LDD(nn.Module):
         delta_z_dd = delta_z - delta_z_da
         delta_z_dd_norm = torch.norm(delta_z_dd, dim=1) + 1e-12
         cos_dd = torch.sum(delta_z_dd * dd_vec, 1) / (delta_z_dd_norm * dd_vec_norm)
-        loss_dd = (1 - cos_dd) * labels
+        if mode == 1 or mode == 3:
+            loss_dd = (1 - cos_dd) * labels_dis
+            loss_dd = loss_dd.sum() / num_dis
+        elif mode == 2:
+            loss_dd = (1 - cos_dd) * labels_ad
+            loss_dd = loss_dd.sum() / num_ad
+
 
         # kl loss
-        nc_idx = torch.where(labels == 0)[0]
-        dis_idx = torch.where(labels == 1)[0]
-        try:
-            delta_z_da_proj_nc = torch.index_select(delta_z_da_proj, 0, nc_idx)
-            delta_z_da_proj_dis = torch.index_select(delta_z_da_proj, 0, dis_idx)
-            nc_mean = torch.mean(delta_z_da_proj_nc)
-            dis_mean = torch.mean(delta_z_da_proj_dis)
-            nc_std = torch.std(delta_z_da_proj_nc)
-            dis_std = torch.std(delta_z_da_proj_dis)
-            # kl_loss = 0.5 * (nc_mean - dis_mean)**2
-            kl_loss = torch.log(dis_std / nc_std) + (nc_std**2 + (nc_mean - dis_mean)**2) / (2*dis_std**2) - 0.5
-        except:
-            kl_loss = torch.tensor(0.)
+        if mode == 1 or mode == 2:
+            nc_idx = torch.where(labels_nc == 1)[0]
+            if mode == 1:
+                dis_idx = torch.where(labels_dis == 1)[0]
+            else:
+                dis_idx = torch.where(labels_ad == 1)[0]
+            try:
+                delta_z_da_proj_nc = torch.index_select(delta_z_da_proj, 0, nc_idx)
+                delta_z_da_proj_dis = torch.index_select(delta_z_da_proj, 0, dis_idx)
+                nc_mean = torch.mean(delta_z_da_proj_nc)
+                dis_mean = torch.mean(delta_z_da_proj_dis)
+                nc_std = torch.std(delta_z_da_proj_nc)
+                dis_std = torch.std(delta_z_da_proj_dis)
+                # kl_loss = 0.5 * (nc_mean - dis_mean)**2
+                kl_loss = torch.log(dis_std / nc_std) + (nc_std**2 + (nc_mean - dis_mean)**2) / (2*dis_std**2) - 0.5
+            except:
+                kl_loss = torch.tensor(0., device=self.gpu)
+
+        else:
+            nc_idx = torch.where(labels_nc == 1)[0]
+            kl_loss = torch.tensor(0., device=self.gpu)
+            num_idx = 0
+            for dis_idx in [2,3,4]:
+                dis_idx = torch.where(labels == dis_idx)[0]
+                try:
+                    delta_z_da_proj_nc = torch.index_select(delta_z_da_proj, 0, nc_idx)
+                    delta_z_da_proj_dis = torch.index_select(delta_z_da_proj, 0, dis_idx)
+                    nc_mean = torch.mean(delta_z_da_proj_nc)
+                    dis_mean = torch.mean(delta_z_da_proj_dis)
+                    nc_std = torch.std(delta_z_da_proj_nc)
+                    dis_std = torch.std(delta_z_da_proj_dis)
+                    # kl_loss = 0.5 * (nc_mean - dis_mean)**2
+                    kl_loss += torch.log(dis_std / nc_std) + (nc_std**2 + (nc_mean - dis_mean)**2) / (2*dis_std**2) - 0.5
+                    num_idx += 1
+                except:
+                    kl_loss += 0
+            if num_idx > 0:
+                kl_loss /= num_idx
 
         # penalty loss for NC projection on disease direction
         delta_z_dd_proj = torch.sum(delta_z * dd_vec, 1) / dd_vec_norm
@@ -508,9 +548,9 @@ class LDD(nn.Module):
             # penalty_loss = torch.mean(torch.abs(delta_z_dd_proj_nc / (delta_z_da_proj_nc+1e-12)))
             penalty_loss = torch.mean(torch.abs(delta_z_dd_proj_nc)) / (torch.mean(torch.abs(delta_z_dd_proj_dis))+1e-12)
         except:
-            penalty_loss = torch.tensor(0.)
+            penalty_loss = torch.tensor(0., device=self.gpu)
 
-        return loss_da.sum() / num_nc, loss_dd.sum() / num_dis, kl_loss, penalty_loss
+        return loss_da, loss_dd, kl_loss, penalty_loss
 
     def compute_directions(self):
         da_vec = self.aging_direction(torch.ones(1, 1).to(self.gpu))   # (1024,)

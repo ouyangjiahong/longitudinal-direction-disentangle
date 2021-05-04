@@ -1,14 +1,14 @@
 
-# phase: 'train'
-phase: 'test'
+phase: 'train'
+# phase: 'test'
 load_yaml: True
-gpu: '2'
+gpu: '1'
 
 # pretraining setting
 # continue_train: False
 continue_train: True
-ckpt_name: 'model_best.pth.tar'
-# ckpt_name: 'pretrained_model_best.pth.tar'      ###################
+# ckpt_name: 'model_best.pth.tar'
+ckpt_name: 'pretrained_model_best.pth.tar'      ###################
 # ckpt_name: 'epoch199.pth.tar'
 
 # dataset
@@ -36,7 +36,7 @@ subj_list_postfix: 'NC_AD_pMCI_sMCI'          ###################
 # subj_list_postfix: 'C'
 
 # training setting
-epochs: 250
+epochs: 300
 batch_size: 64
 num_fold: 5
 fold: 0
@@ -74,15 +74,9 @@ lambda_dis: 0.
 
 
 # LSP
-# ckpt_timelabel: '2021_4_13_11_17'         # LDD, no kl
-# ckpt_timelabel: '2021_4_18_23_39'         # LDD, with kl
-# ckpt_timelabel: '2021_4_13_10_43'         # LSSL on all
-# ckpt_timelabel: '2021_4_18_23_41'         # LDD, based on LSSL on all
-# ckpt_timelabel: '2021_4_22_22_12'         # LDD, based on LSSL on all, with new kl and penalty
-# ckpt_timelabel: '2021_4_22_22_13'         # LDD, based on LSSL on all, with new kl and no penalty
-# ckpt_timelabel: '2021_4_22_22_14'         # LDD, based on LSSL on all, with no kl and no penalty
-# ckpt_timelabel: '2021_4_22_22_15'         # LDD, based on LSSL on all, with new kl and penalty
-# ckpt_timelabel: '2021_4_22_22_16'         # LDD, based on LSSL on all, with new kl and new penalty
-# ckpt_timelabel: '2021_4_22_22_17'         # LDD, based on LSSL on all, with new kl and no penalty
-# ckpt_timelabel: '2021_4_22_22_18'         # LDD, based on 2021_4_22_22_14
-ckpt_timelabel: '2021_4_22_22_19'         # LDD, based on 2021_4_22_22_14, new penalty loss
+# ckpt_timelabel: '2021_4_13_10_43'         # step 1: LSSL on all
+# ckpt_timelabel: '2021_4_22_22_14'         # step 2: LDD, based on LSSL on all 2021_4_13_10_43
+# ckpt_timelabel: '2021_4_22_22_19'         # step 3: LDD, based on 2021_4_22_22_14 ######### 4/22
+ckpt_timelabel: '2021_5_3_22_38'            # step 4: LDD, based on 2021_4_22_22_19
+
+# ckpt_timelabel: '2021_5_3_22_11'            # step 2: LDD, based on LSSL on all 2021_4_13_10_43, only use ad to regularize, 90564
