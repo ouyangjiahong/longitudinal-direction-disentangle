@@ -459,6 +459,8 @@ class LDD(nn.Module):
         bs = z1.shape[0]
         delta_z = (z2 - z1) / interval.unsqueeze(1)
         labels = (labels > 0).type(torch.FloatTensor).to(self.gpu)
+        num_nc = (1-labels).sum() + 1e-12
+        num_dis = labels.sum() + 1e-12
 
         # define directions
         da_vec = self.aging_direction(torch.ones(bs, 1).to(self.gpu))   # (1024,)
@@ -487,15 +489,12 @@ class LDD(nn.Module):
         nc_idx = torch.where(labels == 0)[0]
         dis_idx = torch.where(labels == 1)[0]
         try:
-            # nc_idx_sample = nc_idx[torch.randint(low=0, high=nc_idx.shape[0], size=(bs//2,))]
-            # dis_idx_sample = dis_idx[torch.randint(low=0, high=dis_idx.shape[0], size=(bs//2,))]
-            # delta_z_da_proj_nc = delta_z_da_proj[nc_idx_sample]
-            # delta_z_da_proj_dis = delta_z_da_proj[dis_idx_sample]
-            # kl_loss = 0.5 * (delta_z_da_proj_nc - delta_z_da_proj_dis)**2
-            nc_mean = torch.mean(delta_z_da_proj[nc_idx])
-            dis_mean = torch.mean(delta_z_da_proj[dis_idx])
-            nc_std = torch.std(delta_z_da_proj[nc_idx])
-            dis_std = torch.std(delta_z_da_proj[dis_idx])
+            delta_z_da_proj_nc = torch.index_select(delta_z_da_proj, 0, nc_idx)
+            delta_z_da_proj_dis = torch.index_select(delta_z_da_proj, 0, dis_idx)
+            nc_mean = torch.mean(delta_z_da_proj_nc)
+            dis_mean = torch.mean(delta_z_da_proj_dis)
+            nc_std = torch.std(delta_z_da_proj_nc)
+            dis_std = torch.std(delta_z_da_proj_dis)
             # kl_loss = 0.5 * (nc_mean - dis_mean)**2
             kl_loss = torch.log(dis_std / nc_std) + (nc_std**2 + (nc_mean - dis_mean)**2) / (2*dis_std**2) - 0.5
         except:
@@ -503,12 +502,15 @@ class LDD(nn.Module):
 
         # penalty loss for NC projection on disease direction
         delta_z_dd_proj = torch.sum(delta_z * dd_vec, 1) / dd_vec_norm
+        delta_z_dd_proj_nc = torch.index_select(delta_z_dd_proj, 0, nc_idx)
+        delta_z_dd_proj_dis = torch.index_select(delta_z_dd_proj, 0, dis_idx)
         try:
-            penalty_loss = torch.mean(torch.abs(delta_z_dd_proj[nc_idx] / (delta_z_da_proj[nc_idx]+1e-6)))
+            # penalty_loss = torch.mean(torch.abs(delta_z_dd_proj_nc / (delta_z_da_proj_nc+1e-12)))
+            penalty_loss = torch.mean(torch.abs(delta_z_dd_proj_nc)) / (torch.mean(torch.abs(delta_z_dd_proj_dis))+1e-12)
         except:
             penalty_loss = torch.tensor(0.)
 
-        return loss_da.sum() / (1-labels).sum(), loss_dd.sum() / labels.sum(), kl_loss, penalty_loss
+        return loss_da.sum() / num_nc, loss_dd.sum() / num_dis, kl_loss, penalty_loss
 
     def compute_directions(self):
         da_vec = self.aging_direction(torch.ones(1, 1).to(self.gpu))   # (1024,)

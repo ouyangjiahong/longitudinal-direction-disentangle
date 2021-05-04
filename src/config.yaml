@@ -1,14 +1,15 @@
 
-phase: 'train'
-# phase: 'test'
+# phase: 'train'
+phase: 'test'
 load_yaml: True
-gpu: '1'
+gpu: '2'
 
 # pretraining setting
 # continue_train: False
 continue_train: True
-# ckpt_name: 'model_best.pth.tar'
-ckpt_name: 'pretrained_model_best.pth.tar'      ###################
+ckpt_name: 'model_best.pth.tar'
+# ckpt_name: 'pretrained_model_best.pth.tar'      ###################
+# ckpt_name: 'epoch199.pth.tar'
 
 # dataset
 data_type: 'pair'
@@ -35,8 +36,8 @@ subj_list_postfix: 'NC_AD_pMCI_sMCI'          ###################
 # subj_list_postfix: 'C'
 
 # training setting
-epochs: 200
-batch_size: 32
+epochs: 250
+batch_size: 64
 num_fold: 5
 fold: 0
 shuffle: True
@@ -51,7 +52,7 @@ pos_weight: [1.5]
 # pos_weight: [1.1]
 # froze_encoder: True
 froze_encoder: False
-froze_dir_a: True                  ###################
+froze_dir_a: False                  ###################
 
 # model setting
 latent_size: 1024
@@ -80,4 +81,8 @@ lambda_dis: 0.
 # ckpt_timelabel: '2021_4_22_22_12'         # LDD, based on LSSL on all, with new kl and penalty
 # ckpt_timelabel: '2021_4_22_22_13'         # LDD, based on LSSL on all, with new kl and no penalty
 # ckpt_timelabel: '2021_4_22_22_14'         # LDD, based on LSSL on all, with no kl and no penalty
-ckpt_timelabel: '2021_4_22_22_15'         # LDD, based on LSSL on all, with new kl and penalty
+# ckpt_timelabel: '2021_4_22_22_15'         # LDD, based on LSSL on all, with new kl and penalty
+# ckpt_timelabel: '2021_4_22_22_16'         # LDD, based on LSSL on all, with new kl and new penalty
+# ckpt_timelabel: '2021_4_22_22_17'         # LDD, based on LSSL on all, with new kl and no penalty
+# ckpt_timelabel: '2021_4_22_22_18'         # LDD, based on 2021_4_22_22_14
+ckpt_timelabel: '2021_4_22_22_19'         # LDD, based on 2021_4_22_22_14, new penalty loss

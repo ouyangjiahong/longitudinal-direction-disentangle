@@ -83,7 +83,7 @@ if config['froze_dir_a']:
         print('Model does not have aging_direction')
 
 optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], weight_decay=1e-5, amsgrad=True)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5, min_lr=1e-5)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=5, min_lr=1e-5)
 
 # load pretrained model
 if config['continue_train'] or config['phase'] == 'test':
@@ -291,7 +291,7 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             loss_all_dict[key] /= iter
 
         if phase == 'test' and save_res:
-            pdb.set_trace()
+            # pdb.set_trace()
             # img1_list = np.concatenate(img1_list, axis=0)
             # img2_list = np.concatenate(img2_list, axis=0)
             # recon1_list = np.concatenate(recon1_list, axis=0)
@@ -320,6 +320,6 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
 if config['phase'] == 'train':
     train()
 else:
-    stat = evaluate(phase='test', set='train', save_res=True, info='')
-    # stat = evaluate(phase='test', set='test', save_res=True, info='')
+    # stat = evaluate(phase='test', set='train', save_res=True, info='')
+    stat = evaluate(phase='test', set='test', save_res=True, info='')
     print(stat)
