@@ -151,7 +151,7 @@ def train():
             loss_all_dict['penalty'] += loss_penalty.item()
 
             loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             for name, param in model.named_parameters():
                 try:
                     if not torch.isfinite(param.grad).all():
@@ -320,6 +320,6 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
 if config['phase'] == 'train':
     train()
 else:
-    # stat = evaluate(phase='test', set='train', save_res=True, info='')
-    stat = evaluate(phase='test', set='test', save_res=True, info='')
+    stat = evaluate(phase='test', set='train', save_res=True, info='')
+    # stat = evaluate(phase='test', set='test', save_res=True, info='')
     print(stat)
