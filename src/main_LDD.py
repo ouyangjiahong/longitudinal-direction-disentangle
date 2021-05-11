@@ -327,12 +327,18 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
 
             # save simulated average brain
             path = os.path.join(res_path, 'average_brain.npy')
+            if config['dataset_name'] == 'ADNI':
+                age_thres = [60, 85]
+                age_interval = 5
+            elif config['dataset_name'] == 'LAB':
+                age_thres = [30, 80]
+                age_interval = 10
             if config['model_name'] == 'LDD':
                 compute_average_brain_one_disease(path, model, da.detach().cpu().numpy(), dd.detach().cpu().numpy(),
-                                        z1_list, label_list, age_list, age_thres=[60,85], age_interval=5)
+                                        z1_list, label_list, age_list, age_thres=age_thres, age_interval=age_interval)
             elif config['model_name'] == 'LDDM':
                 compute_average_brain_two_disease(path, model, da.detach().cpu().numpy(), dd.detach().cpu().numpy(),
-                                        z1_list, label_list, age_list, label_cls=config['label_list'], age_thres=[60,85], age_interval=5)
+                                        z1_list, label_list, age_list, label_cls=config['label_list'], age_thres=age_thres, age_interval=age_interval)
 
     return loss_all_dict
 
