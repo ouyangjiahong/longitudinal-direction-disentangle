@@ -668,7 +668,6 @@ class LDDM(nn.Module):
         return loss_da, loss_dd, kl_loss, penalty_loss
 
     def compute_directions(self):
-        # pdb.set_trace()
         da_vec = self.aging_direction(torch.ones(1, 1).to(self.gpu))   # (1024,)
         dd1_vec_front = self.disease_direction1(torch.ones(1, 1).to(self.gpu))   # (1023,)
         dd1_vec_last = - torch.sum(da_vec[:,:-1] * dd1_vec_front, 1) / (da_vec[:,-1] + 1e-12)

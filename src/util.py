@@ -252,7 +252,7 @@ def compute_classification_metrics(label, pred, postfix='NC_AD'):
         print(auc, bacc, sen, spe)
         return bacc
 
-def compute_average_brain(path, model, da, dd, z_list, label_list, age_list, age_thres=[60,85], age_interval=5):
+def compute_average_brain_one_disease(path, model, da, dd, z_list, label_list, age_list, age_thres=[60,85], age_interval=5):
     idx_list = np.logical_and(age_list>age_thres[0], age_list<age_thres[1])
     z_list = z_list[idx_list]
     label_list = label_list[idx_list]
@@ -287,6 +287,67 @@ def compute_average_brain(path, model, da, dd, z_list, label_list, age_list, age
         for age in range(age_thres[0], age_thres[1]+1, age_interval):
             da_age = (age - age_thres[0]) / (age_thres[1] - age_thres[0]) * (da_max - da_min) + da_min
             z_mean = da_age * da_norm + proj_other_cls_mean + proj_dd_cls_mean
+            z_mean_age_list.append(z_mean)
+        z_mean_list.append(np.concatenate(z_mean_age_list, 0))
+    z_mean_list = np.stack(z_mean_list, 0)
+    recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
+    recons = recons.view(len(label_class), -1, 64, 64, 64).detach().cpu().numpy()
+    np.save(path, recons)
+
+def compute_average_brain_two_disease(path, model, da, dd, z_list, label_list, age_list, label_cls, age_thres=[60,85], age_interval=5):
+    idx_list = np.logical_and(age_list>age_thres[0], age_list<age_thres[1])
+    z_list = z_list[idx_list]
+    label_list = label_list[idx_list]
+    age_list = age_list[idx_list]
+    label_class = np.sort(np.unique(label_list))
+    da_norm = da / np.linalg.norm(da)
+    dd1, dd2 = dd[:,:da.shape[1]], dd[:,da.shape[1]:]
+    dd1_norm = dd1 / np.linalg.norm(dd1)
+    dd2_norm = dd2 / np.linalg.norm(dd2)
+    proj_da_val = np.dot(z_list, np.transpose(da_norm))
+    proj_dd1_val = np.dot(z_list, np.transpose(dd1_norm))
+    proj_dd2_val = np.dot(z_list, np.transpose(dd2_norm))
+
+    z_mean_list = []
+    for label in label_class:
+        # filter this diagnosis cases
+        z_list_cls = z_list[label_list==label]
+        age_list_cls = age_list[label_list==label]
+        # range of age and projection value on aging direction
+        age_min, age_max = age_list_cls.min(), age_list_cls.max()
+        proj_da_val_cls = proj_da_val[label_list==label]
+        da_min, da_max = np.percentile(proj_da_val_cls, 5), np.percentile(proj_da_val_cls, 95)
+        if label in label_cls[0]:   # C
+            proj_other_cls = z_list_cls - proj_da_val_cls * np.tile(da_norm, [proj_da_val_cls.shape[0],1])
+            proj_other_cls_mean = np.mean(proj_other_cls, 0)
+            proj_dd1_cls_mean = 0
+            proj_dd2_cls_mean = 0
+        elif label in label_cls[1] and label in label_cls[2]:   # HE
+            # mean on disease direction
+            proj_dd1_val_cls = proj_dd1_val[label_list==label]
+            proj_dd1_cls_mean =  np.mean(proj_dd1_val_cls, 0) * dd1_norm
+            proj_dd2_val_cls = proj_dd2_val[label_list==label]
+            proj_dd2_cls_mean =  np.mean(proj_dd2_val_cls, 0) * dd2_norm
+            proj_other_cls = z_list_cls - np.tile(proj_dd1_cls_mean,[proj_da_val_cls.shape[0],1]) - np.tile(proj_dd2_cls_mean,[proj_da_val_cls.shape[0],1]) - proj_da_val_cls * da_norm
+            proj_other_cls_mean = np.transpose(np.mean(proj_other_cls, 0))
+        else:
+            if label in label_cls[1]:
+                proj_dd1_val_cls = proj_dd1_val[label_list==label]
+                proj_dd1_cls_mean =  np.mean(proj_dd1_val_cls, 0) * dd1_norm
+                proj_other_cls = z_list_cls - np.tile(proj_dd1_cls_mean,[proj_da_val_cls.shape[0],1]) - proj_da_val_cls * da_norm
+                proj_other_cls_mean = np.transpose(np.mean(proj_other_cls, 0))
+                proj_dd2_cls_mean = 0
+            else:
+                proj_dd2_val_cls = proj_dd2_val[label_list==label]
+                proj_dd2_cls_mean =  np.mean(proj_dd2_val_cls, 0) * dd2_norm
+                proj_other_cls = z_list_cls - np.tile(proj_dd2_cls_mean,[proj_da_val_cls.shape[0],1]) - proj_da_val_cls * da_norm
+                proj_other_cls_mean = np.transpose(np.mean(proj_other_cls, 0))
+                proj_dd1_cls_mean = 0
+
+        z_mean_age_list = []
+        for age in range(age_thres[0], age_thres[1]+1, age_interval):
+            da_age = (age - age_thres[0]) / (age_thres[1] - age_thres[0]) * (da_max - da_min) + da_min
+            z_mean = da_age * da_norm + proj_other_cls_mean + proj_dd1_cls_mean + proj_dd2_cls_mean
             z_mean_age_list.append(z_mean)
         z_mean_list.append(np.concatenate(z_mean_age_list, 0))
     z_mean_list = np.stack(z_mean_list, 0)
