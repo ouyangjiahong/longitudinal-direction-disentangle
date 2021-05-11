@@ -336,6 +336,11 @@ class LSSL(nn.Module):
         cos = torch.sum(delta_z * d_vec, 1) / (delta_z_norm * d_vec_norm)
         return (1. - cos).mean()
 
+    def compute_directions(self):
+        # pdb.set_trace()
+        da_vec = self.direction(torch.ones(1, 1).to(self.gpu))   # (1024,)
+        return da_vec
+
 class LSP(nn.Module):
     def __init__(self, model_name='LSP', latent_size=1024, num_neighbours=3, agg_method='gaussain', gpu=None):
         super(LSP, self).__init__()
@@ -508,9 +513,7 @@ class LDD(nn.Module):
         except:
             kl_loss = torch.tensor(0., device=self.gpu)
 
-
         # penalty loss for NC projection on disease direction
-        dis_idx = torch.where(labels_dis == 1)[0]
         delta_z_dd_proj = torch.sum(delta_z * dd_vec, 1) / dd_vec_norm
         delta_z_dd_proj_nc = torch.index_select(delta_z_dd_proj, 0, nc_idx)
         delta_z_dd_proj_dis = torch.index_select(delta_z_dd_proj, 0, dis_idx)
@@ -528,3 +531,149 @@ class LDD(nn.Module):
         dd_vec_last = - torch.sum(da_vec[:,:-1] * dd_vec_front, 1) / (da_vec[:,-1] + 1e-12)
         dd_vec = torch.cat([dd_vec_front, dd_vec_last.unsqueeze(1)], 1)
         return da_vec, dd_vec
+
+
+class LDDM(nn.Module):
+    def __init__(self, label_list, gpu='None'):
+        super(LDDM, self).__init__()
+        self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
+        self.decoder = Decoder(out_num_ch=1, inter_num_ch=16, num_conv=1)
+        self.aging_direction = nn.Linear(1, 1024, bias=False)
+        self.disease_direction1 = nn.Linear(1, 1024-1, bias=False)
+        self.disease_direction2 = nn.Linear(1, 1024-1, bias=False)
+        self.label_list = label_list            # [[NC labels], [dis1 labels], [dis2 labels]]
+        self.gpu = gpu
+
+    def forward(self, img1, img2, interval):
+        bs = img1.shape[0]
+        zs = self.encoder(torch.cat([img1, img2], 0))
+        recons = self.decoder(zs)
+        zs_flatten = zs.view(bs*2, -1)
+        z1, z2 = zs_flatten[:bs], zs_flatten[bs:]
+        recon1, recon2 = recons[:bs], recons[bs:]
+        return [z1, z2], [recon1, recon2]
+
+    # reconstruction loss
+    def compute_recon_loss(self, x, recon):
+        return torch.mean((x - recon) ** 2)
+
+    # direction loss
+    def compute_direction_loss(self, zs, labels, interval):
+        z1, z2 = zs[0], zs[1]
+        bs = z1.shape[0]
+        delta_z = (z2 - z1) / interval.unsqueeze(1)
+
+        labels_nc = torch.zeros_like(labels).type(torch.FloatTensor).to(self.gpu)
+        for i in range(len(self.label_list[0])):
+            labels_nc += labels==self.label_list[0][i]
+        labels_nc = labels_nc > 0
+        labels_dis1 = torch.zeros_like(labels).type(torch.FloatTensor).to(self.gpu)
+        for i in range(len(self.label_list[1])):
+            labels_dis1 += labels==self.label_list[1][i]
+        labels_dis1 = labels_dis1 > 0
+        labels_dis2 = torch.zeros_like(labels).type(torch.FloatTensor).to(self.gpu)
+        for i in range(len(self.label_list[2])):
+            labels_dis2 += labels==self.label_list[2][i]
+        labels_dis2 = labels_dis2 > 0
+
+        num_nc = labels_nc.sum() + 1e-12
+        num_dis1 = labels_dis1.sum() + 1e-12
+        num_dis2 = labels_dis2.sum() + 1e-12
+
+        # define directions
+        # aging direction
+        da_vec = self.aging_direction(torch.ones(bs, 1).to(self.gpu))   # (1024,)
+        da_vec_norm = torch.norm(da_vec, dim=1) + 1e-12
+        delta_z_norm = torch.norm(delta_z, dim=1) + 1e-12
+        cos_da = torch.sum(delta_z * da_vec, 1) / (delta_z_norm * da_vec_norm)
+        loss_da = (1 - cos_da) * labels_nc
+        loss_da = loss_da.sum() / num_nc
+        # component on aging direction
+        delta_z_da_proj = torch.sum(delta_z * da_vec, 1) / da_vec_norm
+        delta_z_da = delta_z_da_proj.unsqueeze(1) * da_vec / da_vec_norm.unsqueeze(1)
+        # residual component
+        delta_z_dd = delta_z - delta_z_da
+        delta_z_dd_norm = torch.norm(delta_z_dd, dim=1) + 1e-12
+
+        # disease direction 1
+        dd1_vec_front = self.disease_direction1(torch.ones(bs, 1).to(self.gpu))   # (1023,)
+        dd1_vec_last = - torch.sum(da_vec[:,:-1] * dd1_vec_front, 1) / (da_vec[:,-1] + 1e-12)
+        dd1_vec = torch.cat([dd1_vec_front, dd1_vec_last.unsqueeze(1)], 1)
+        if torch.any((torch.sum(da_vec * dd1_vec, 1) - 1e-4) > 0):
+            pdb.set_trace()
+        dd1_vec_norm = torch.norm(dd1_vec, dim=1) + 1e-12
+
+        cos_dd1 = torch.sum(delta_z_dd * dd1_vec, 1) / (delta_z_dd_norm * dd1_vec_norm)
+        loss_dd1 = (1 - cos_dd1) * labels_dis1
+        loss_dd1 = loss_dd1.sum() / num_dis1
+
+        # disease direction 2
+        dd2_vec_front = self.disease_direction2(torch.ones(bs, 1).to(self.gpu))   # (1023,)
+        dd2_vec_last = - torch.sum(da_vec[:,:-1] * dd2_vec_front, 1) / (da_vec[:,-1] + 1e-12)
+        dd2_vec = torch.cat([dd2_vec_front, dd2_vec_last.unsqueeze(1)], 1)
+        if torch.any((torch.sum(da_vec * dd2_vec, 1) - 1e-4) > 0):
+            pdb.set_trace()
+        dd2_vec_norm = torch.norm(dd2_vec, dim=1) + 1e-12
+
+        cos_dd2 = torch.sum(delta_z_dd * dd2_vec, 1) / (delta_z_dd_norm * dd2_vec_norm)
+        loss_dd2 = (1 - cos_dd2) * labels_dis2
+        loss_dd2 = loss_dd2.sum() / num_dis2
+        loss_dd = loss_dd1 + loss_dd2
+
+
+        # kl loss
+        nc_idx = torch.where(labels_nc == 1)[0]
+        dis1_idx = torch.where(labels_dis1 == 1)[0]
+        dis2_idx = torch.where(labels_dis2 == 1)[0]
+        try:
+            delta_z_da_proj_nc = torch.index_select(delta_z_da_proj, 0, nc_idx)
+            delta_z_da_proj_dis1 = torch.index_select(delta_z_da_proj, 0, dis1_idx)
+            delta_z_da_proj_dis2 = torch.index_select(delta_z_da_proj, 0, dis2_idx)
+            nc_mean = torch.mean(delta_z_da_proj_nc)
+            dis1_mean = torch.mean(delta_z_da_proj_dis1)
+            dis2_mean = torch.mean(delta_z_da_proj_dis2)
+            nc_std = torch.std(delta_z_da_proj_nc)
+            dis1_std = torch.std(delta_z_da_proj_dis1)
+            dis2_std = torch.std(delta_z_da_proj_dis2)
+            # kl_loss = 0.5 * (nc_mean - dis_mean)**2
+            kl_loss = torch.tensor(0., device=self.gpu)
+            if torch.isfinite(dis1_std):
+                kl_loss += torch.log(dis1_std / nc_std) + (nc_std**2 + (nc_mean - dis1_mean)**2) / (2*dis1_std**2) - 0.5
+            if torch.isfinite(dis2_std):
+                kl_loss += torch.log(dis2_std / nc_std) + (nc_std**2 + (nc_mean - dis2_mean)**2) / (2*dis2_std**2) - 0.5
+        except:
+            kl_loss = torch.tensor(0., device=self.gpu)
+
+
+        # penalty loss for NC projection on disease direction
+        penalty_loss = torch.tensor(0., device=self.gpu)
+        delta_z_dd1_proj = torch.sum(delta_z * dd1_vec, 1) / dd1_vec_norm
+        delta_z_dd1_proj_nc = torch.index_select(delta_z_dd1_proj, 0, nc_idx)
+        delta_z_dd1_proj_dis = torch.index_select(delta_z_dd1_proj, 0, dis1_idx)
+        try:
+            # penalty_loss = torch.mean(torch.abs(delta_z_dd_proj_nc / (delta_z_da_proj_nc+1e-12)))
+            penalty_loss += torch.mean(torch.abs(delta_z_dd1_proj_nc)) / (torch.mean(torch.abs(delta_z_dd1_proj_dis))+1e-12)
+        except:
+            penalty_loss += torch.tensor(0., device=self.gpu)
+
+        delta_z_dd2_proj = torch.sum(delta_z * dd2_vec, 1) / dd1_vec_norm
+        delta_z_dd2_proj_nc = torch.index_select(delta_z_dd2_proj, 0, nc_idx)
+        delta_z_dd2_proj_dis = torch.index_select(delta_z_dd2_proj, 0, dis2_idx)
+        try:
+            # penalty_loss = torch.mean(torch.abs(delta_z_dd_proj_nc / (delta_z_da_proj_nc+1e-12)))
+            penalty_loss = +torch.mean(torch.abs(delta_z_dd2_proj_nc)) / (torch.mean(torch.abs(delta_z_dd2_proj_dis))+1e-12)
+        except:
+            penalty_loss += torch.tensor(0., device=self.gpu)
+
+        return loss_da, loss_dd, kl_loss, penalty_loss
+
+    def compute_directions(self):
+        # pdb.set_trace()
+        da_vec = self.aging_direction(torch.ones(1, 1).to(self.gpu))   # (1024,)
+        dd1_vec_front = self.disease_direction1(torch.ones(1, 1).to(self.gpu))   # (1023,)
+        dd1_vec_last = - torch.sum(da_vec[:,:-1] * dd1_vec_front, 1) / (da_vec[:,-1] + 1e-12)
+        dd1_vec = torch.cat([dd1_vec_front, dd1_vec_last.unsqueeze(1)], 1)
+        dd2_vec_front = self.disease_direction2(torch.ones(1, 1).to(self.gpu))   # (1023,)
+        dd2_vec_last = - torch.sum(da_vec[:,:-1] * dd2_vec_front, 1) / (da_vec[:,-1] + 1e-12)
+        dd2_vec = torch.cat([dd2_vec_front, dd2_vec_last.unsqueeze(1)], 1)
+        return da_vec, torch.cat([dd1_vec, dd2_vec], 1)

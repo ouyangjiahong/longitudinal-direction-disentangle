@@ -251,3 +251,45 @@ def compute_classification_metrics(label, pred, postfix='NC_AD'):
         bacc = 0.5 * (sen + spe)
         print(auc, bacc, sen, spe)
         return bacc
+
+def compute_average_brain(path, model, da, dd, z_list, label_list, age_list, age_thres=[60,85], age_interval=5):
+    idx_list = np.logical_and(age_list>age_thres[0], age_list<age_thres[1])
+    z_list = z_list[idx_list]
+    label_list = label_list[idx_list]
+    age_list = age_list[idx_list]
+    label_class = np.sort(np.unique(label_list))
+    da_norm = da / np.linalg.norm(da)
+    dd_norm = dd / np.linalg.norm(dd)
+    proj_da_val = np.dot(z_list, np.transpose(da_norm))
+    proj_dd_val = np.dot(z_list, np.transpose(dd_norm))
+
+    z_mean_list = []
+    for label in label_class:
+        # filter this diagnosis cases
+        z_list_cls = z_list[label_list==label]
+        age_list_cls = age_list[label_list==label]
+        # range of age and projection value on aging direction
+        age_min, age_max = age_list_cls.min(), age_list_cls.max()
+        proj_da_val_cls = proj_da_val[label_list==label]
+        da_min, da_max = np.percentile(proj_da_val_cls, 5), np.percentile(proj_da_val_cls, 95)
+        if label == 0:
+            proj_other_cls = z_list_cls - proj_da_val_cls * np.tile(da_norm, [proj_da_val_cls.shape[0],1])
+            proj_other_cls_mean = np.mean(proj_other_cls, 0)
+            proj_dd_cls_mean = 0
+        else:
+            # mean on disease direction
+            proj_dd_val_cls = proj_dd_val[label_list==label]
+            proj_dd_cls_mean =  np.mean(proj_dd_val_cls, 0) * dd_norm
+            proj_other_cls = z_list_cls - np.tile(proj_dd_cls_mean,[proj_da_val_cls.shape[0],1]) - proj_da_val_cls * da_norm
+            proj_other_cls_mean = np.transpose(np.mean(proj_other_cls, 0))
+
+        z_mean_age_list = []
+        for age in range(age_thres[0], age_thres[1]+1, age_interval):
+            da_age = (age - age_thres[0]) / (age_thres[1] - age_thres[0]) * (da_max - da_min) + da_min
+            z_mean = da_age * da_norm + proj_other_cls_mean + proj_dd_cls_mean
+            z_mean_age_list.append(z_mean)
+        z_mean_list.append(np.concatenate(z_mean_age_list, 0))
+    z_mean_list = np.stack(z_mean_list, 0)
+    recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
+    recons = recons.view(len(label_class), -1, 64, 64, 64).detach().cpu().numpy()
+    np.save(path, recons)

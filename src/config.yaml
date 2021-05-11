@@ -1,15 +1,15 @@
 
-phase: 'train'
-# phase: 'test'
+# phase: 'train'
+phase: 'test'
 load_yaml: True
-gpu: '1'
+gpu: '0'
 
 # pretraining setting
 # continue_train: False
 continue_train: True
-# ckpt_name: 'model_best.pth.tar'
-ckpt_name: 'pretrained_model_best.pth.tar'      ###################
-# ckpt_name: 'epoch199.pth.tar'
+ckpt_name: 'model_best.pth.tar'
+# ckpt_name: 'pretrained_model_best.pth.tar'      ###################
+# ckpt_name: 'epoch197.pth.tar'
 
 # dataset
 data_type: 'pair'
@@ -24,7 +24,7 @@ subj_list_postfix: 'NC_AD_pMCI_sMCI'          ###################
 # subj_list_postfix: 'pMCI_sMCI'
 
 # data_type: 'pair'
-# data_type: 'single'
+# # data_type: 'single'
 # dataset_name: 'LAB'
 # data_path: '../data/LAB/'
 # # img_file_name: 'LAB_longitudinal_img.h5'
@@ -32,11 +32,13 @@ subj_list_postfix: 'NC_AD_pMCI_sMCI'          ###################
 # noimg_file_name: 'LAB_longitudinal_noimg.h5'
 # # subj_list_postfix: 'C_E_HE_far'
 # # subj_list_postfix: 'C_E_HE'
+# # subj_list_postfix: 'C_E_H_HE'
+# subj_list_postfix: 'C_E_H'
 # # subj_list_postfix: 'C_single'
-# subj_list_postfix: 'C'
+# # subj_list_postfix: 'C'
 
 # training setting
-epochs: 300
+epochs: 200
 batch_size: 64
 num_fold: 5
 fold: 0
@@ -59,24 +61,33 @@ latent_size: 1024
 num_neighbours: 5
 agg_method: 'gaussian'
 
+# model_name: 'LDDM'
 model_name: 'LDD'       ####################
 # model_name: 'LSSL'       # longitudinal direction disentangle
 # model_name: 'CLS'       # encoder + classifier
-lambda_recon: 2.
-lambda_dir_a: 1.
+lambda_recon: 4.
+lambda_dir_a: 2.
 lambda_dir_d: 1.
 lambda_cls: 0.
-lambda_kl: 1.
-lambda_penalty: 1.      ###################
+lambda_kl: 0.
+lambda_penalty: 0.      ###################
 
 lambda_dir: 1.
 lambda_dis: 0.
 
+label_list: [[0], [1], [2]]
 
-# LSP
+
+# LDD on ADNI
 # ckpt_timelabel: '2021_4_13_10_43'         # step 1: LSSL on all
 # ckpt_timelabel: '2021_4_22_22_14'         # step 2: LDD, based on LSSL on all 2021_4_13_10_43
-# ckpt_timelabel: '2021_4_22_22_19'         # step 3: LDD, based on 2021_4_22_22_14 ######### 4/22
-ckpt_timelabel: '2021_5_3_22_38'            # step 4: LDD, based on 2021_4_22_22_19
+ckpt_timelabel: '2021_4_22_22_19'         # step 3: LDD, based on 2021_4_22_22_14 ######### 4/22
 
-# ckpt_timelabel: '2021_5_3_22_11'            # step 2: LDD, based on LSSL on all 2021_4_13_10_43, only use ad to regularize, 90564
+# ckpt_timelabel: '2021_5_3_22_38'            # step 4: LDD, based on 2021_4_22_22_14, 97685, gpu 1
+
+# ckpt_timelabel: '2021_5_3_22_11'            # step 2: LDD, based on LSSL on all 2021_4_13_10_43, only use ad to regularize
+# ckpt_timelabel: '2021_5_3_22_12'            # step 3: LDD, based on 2021_5_3_22_11, only use ad to regularize
+
+# LDD on LAB
+# ckpt_timelabel: '2021_5_10_16_9'         # step 1: LSSL on C+E+H+HE, 2,1,0,0,0
+# ckpt_timelabel: '2021_5_10_16_10'         # step 2: LDDM 2021_5_10_16_9, loss: 4,2,1,0,0

@@ -63,6 +63,8 @@ testDataLoader = Data.testLoader
 # define model
 if config['model_name'] == 'LDD':
     model = LDD(gpu=config['device']).to(config['device'])
+elif config['model_name'] == 'LDDM':
+    model = LDDM(label_list=config['label_list'], gpu=config['device']).to(config['device'])
 elif config['model_name'] == 'AE':
     model = AE().to(config['device'])
 elif config['model_name'] == 'VAE':
@@ -264,6 +266,10 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
                 loss_dir_d = torch.tensor(0.)
                 loss_kl = torch.tensor(0.)
                 loss_penalty = torch.tensor(0.)
+            # loss_dir_a = torch.tensor(0.)
+            # loss_dir_d = torch.tensor(0.)
+            # loss_kl = torch.tensor(0.)
+            # loss_penalty = torch.tensor(0.)
 
             loss_all_dict['all'] += loss.item()
             loss_all_dict['recon'] += loss_recon.item()
@@ -301,19 +307,28 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             interval_list = np.concatenate(interval_list, axis=0)
             age_list = np.concatenate(age_list, axis=0)
             label_list = np.concatenate(label_list, axis=0)
-            da, dd = model.compute_directions()
+            if config['model_name'] == 'LSSL':
+                da = model.compute_directions()
+                dd = da
+            else:
+                da, dd = model.compute_directions()
             h5_file = h5py.File(path, 'w')
             # h5_file.create_dataset('img1', data=img1_list)
             # h5_file.create_dataset('img2', data=img2_list)
-            h5_file.create_dataset('label', data=label_list)
             # h5_file.create_dataset('recon1', data=recon1_list)
             # h5_file.create_dataset('recon2', data=recon2_list)
+            h5_file.create_dataset('label', data=label_list)
             h5_file.create_dataset('z1', data=z1_list)
             h5_file.create_dataset('z2', data=z2_list)
             h5_file.create_dataset('interval', data=interval_list)
             h5_file.create_dataset('age', data=age_list)
             h5_file.create_dataset('da', data=da.detach().cpu().numpy())
             h5_file.create_dataset('dd', data=dd.detach().cpu().numpy())
+
+            # save simulated average brain
+            path = os.path.join(res_path, 'average_brain.npy')
+            z_avg = compute_average_brain(path, model, da.detach().cpu().numpy(), dd.detach().cpu().numpy(),
+                                        z1_list, label_list, age_list, age_thres=[60,85], age_interval=5)
 
     return loss_all_dict
 
