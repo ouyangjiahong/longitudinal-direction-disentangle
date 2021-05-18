@@ -162,6 +162,25 @@ class Encoder_Var(nn.Module):
         # (16,4,4,4)
         return mean, logvar
 
+class Encoder_Simple(nn.Module):
+    def __init__(self, inter_num_ch=16):
+        super(Encoder_Simple, self).__init__()
+        self.conv = nn.Sequential(
+                        nn.Conv3d(1, inter_num_ch, kernel_size=3, padding=1),
+                        nn.ReLU(inplace=True),
+                        nn.MaxPool3d(2),
+                        nn.Conv3d(inter_num_ch, 2*inter_num_ch, kernel_size=3, padding=1),
+                        nn.ReLU(inplace=True),
+                        nn.MaxPool3d(2),
+                        nn.Conv3d(2*inter_num_ch, 4*inter_num_ch, kernel_size=3, padding=1),
+                        nn.ReLU(inplace=True),
+                        nn.MaxPool3d(2),
+                        nn.Conv3d(4*inter_num_ch, inter_num_ch, kernel_size=3, padding=1),
+                        nn.ReLU(inplace=True),
+                        nn.MaxPool3d(2))
+
+    def forward(self, x):
+        return self.conv(x)
 
 class Decoder(nn.Module):
     def __init__(self, out_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
@@ -181,6 +200,27 @@ class Decoder(nn.Module):
         conv1 = self.conv1(conv2)
         output = self.conv0(conv1)
         return output
+
+class Decoder_Simple(nn.Module):
+    def __init__(self, inter_num_ch=16):
+        super(Decoder_Simple, self).__init__()
+        self.conv = nn.Sequential(
+                        nn.Conv3d(inter_num_ch, inter_num_ch, kernel_size=3, padding=1),
+                        nn.ReLU(inplace=True),
+                        nn.Upsample(scale_factor=(2,2,2), mode='trilinear', align_corners=True),
+                        nn.Conv3d(inter_num_ch, 4*inter_num_ch, kernel_size=3, padding=1),
+                        nn.ReLU(inplace=True),
+                        nn.Upsample(scale_factor=(2,2,2), mode='trilinear', align_corners=True),
+                        nn.Conv3d(4*inter_num_ch, 2*inter_num_ch, kernel_size=3, padding=1),
+                        nn.ReLU(inplace=True),
+                        nn.Upsample(scale_factor=(2,2,2), mode='trilinear', align_corners=True),
+                        nn.Conv3d(2*inter_num_ch, inter_num_ch, kernel_size=3, padding=1),
+                        nn.ReLU(inplace=True),
+                        nn.Upsample(scale_factor=(2,2,2), mode='trilinear', align_corners=True),
+                        nn.Conv3d(inter_num_ch, 1, kernel_size=3, padding=1))
+
+    def forward(self, x):
+        return self.conv(x)
 
 class Classifier(nn.Module):
     def __init__(self, latent_size=1024, inter_num_ch=64):
@@ -305,10 +345,16 @@ class VAE(nn.Module):
         return torch.mean(torch.sum(kl, dim=-1))
 
 class LSSL(nn.Module):
-    def __init__(self, gpu='None'):
+    def __init__(self, gpu='None', model='normal'):
         super(LSSL, self).__init__()
-        self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
-        self.decoder = Decoder(out_num_ch=1, inter_num_ch=16, num_conv=1)
+        if model == 'normal':
+            self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
+            self.decoder = Decoder(out_num_ch=1, inter_num_ch=16, num_conv=1)
+        elif model == 'simple':
+            self.encoder = Encoder_Simple()
+            self.decoder = Decoder_Simple()
+        else:
+            raise ValueError('Do not support other encoder-decoder model!')
         self.direction = nn.Linear(1, 1024)
         self.gpu = gpu
 
@@ -437,10 +483,16 @@ class LSP(nn.Module):
 
 
 class LDD(nn.Module):
-    def __init__(self, gpu='None'):
+    def __init__(self, gpu='None', model='normal'):
         super(LDD, self).__init__()
-        self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
-        self.decoder = Decoder(out_num_ch=1, inter_num_ch=16, num_conv=1)
+        if model == 'normal':
+            self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
+            self.decoder = Decoder(out_num_ch=1, inter_num_ch=16, num_conv=1)
+        elif model == 'simple':
+            self.encoder = Encoder_Simple()
+            self.decoder = Decoder_Simple()
+        else:
+            raise ValueError('Do not support other encoder-decoder model!')
         self.aging_direction = nn.Linear(1, 1024, bias=False)
         self.disease_direction = nn.Linear(1, 1024-1, bias=False)
         self.gpu = gpu
@@ -534,10 +586,16 @@ class LDD(nn.Module):
 
 
 class LDDM(nn.Module):
-    def __init__(self, label_list, gpu='None'):
+    def __init__(self, label_list, gpu='None', model='normal'):
         super(LDDM, self).__init__()
-        self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
-        self.decoder = Decoder(out_num_ch=1, inter_num_ch=16, num_conv=1)
+        if model == 'normal':
+            self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
+            self.decoder = Decoder(out_num_ch=1, inter_num_ch=16, num_conv=1)
+        elif model == 'simple':
+            self.encoder = Encoder_Simple()
+            self.decoder = Decoder_Simple()
+        else:
+            raise ValueError('Do not support other encoder-decoder model!')
         self.aging_direction = nn.Linear(1, 1024, bias=False)
         self.disease_direction1 = nn.Linear(1, 1024-1, bias=False)
         self.disease_direction2 = nn.Linear(1, 1024-1, bias=False)

@@ -62,15 +62,15 @@ testDataLoader = Data.testLoader
 
 # define model
 if config['model_name'] == 'LDD':
-    model = LDD(gpu=config['device']).to(config['device'])
+    model = LDD(gpu=config['device'], model=config['enc_dec_type']).to(config['device'])
 elif config['model_name'] == 'LDDM':
-    model = LDDM(label_list=config['label_list'], gpu=config['device']).to(config['device'])
+    model = LDDM(label_list=config['label_list'], gpu=config['device'], model=config['enc_dec_type']).to(config['device'])
 elif config['model_name'] == 'AE':
     model = AE().to(config['device'])
 elif config['model_name'] == 'VAE':
     model = VAE().to(config['device'])
 elif config['model_name'] == 'LSSL':
-    model = LSSL(gpu=config['device']).to(config['device'])
+    model = LSSL(gpu=config['device'], model=config['enc_dec_type']).to(config['device'])
 elif config['model_name'] in ['LSP']:
     model = LSP(gpu=config['device']).to(config['device'])
 else:
@@ -83,6 +83,10 @@ if config['froze_dir_a']:
         print('Frozen aging direction!!!')
     except:
         print('Model does not have aging_direction')
+if config['froze_encoder']:
+    for param in model.encoder.parameters():
+        param.requires_grad = False
+    print('Frozen Encoder!!!')
 
 optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], weight_decay=1e-5, amsgrad=True)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.9, patience=5, min_lr=1e-5)
@@ -129,7 +133,7 @@ def train():
             else:
                 loss_recon = torch.tensor(0.)
 
-            if config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0:
+            if (config['model_name'] == 'LDD' or config['model_name'] == 'LDDM') and (config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0):
                 loss_dir_a, loss_dir_d, loss_kl, loss_penalty = model.compute_direction_loss(zs, label, interval)
                 if config['lambda_dir_a'] > 0:
                     loss += config['lambda_dir_a'] * loss_dir_a
@@ -139,6 +143,12 @@ def train():
                     loss += config['lambda_kl'] * loss_kl
                 if config['lambda_penalty'] > 0:
                     loss += config['lambda_penalty'] * loss_penalty
+            elif config['model_name'] == 'LSSL' and config['lambda_dir_a'] > 0:
+                loss_dir_a = model.compute_direction_loss(zs)
+                loss += config['lambda_dir_a'] * loss_dir_a
+                loss_dir_d = torch.tensor(0.)
+                loss_kl = torch.tensor(0.)
+                loss_penalty = torch.tensor(0.)
             else:
                 loss_dir_a = torch.tensor(0.)
                 loss_dir_d = torch.tensor(0.)
@@ -251,27 +261,27 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             else:
                 loss_recon = torch.tensor(0.)
 
-            if config['model_name'] == 'LSSL':
+            if (config['model_name'] == 'LDD' or config['model_name'] == 'LDDM') and (config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0):
+                loss_dir_a, loss_dir_d, loss_kl, loss_penalty = model.compute_direction_loss(zs, label, interval)
+                if config['lambda_dir_a'] > 0:
+                    loss += config['lambda_dir_a'] * loss_dir_a
+                if config['lambda_dir_d'] > 0:
+                    loss += config['lambda_dir_d'] * loss_dir_d
+                if config['lambda_kl'] > 0:
+                    loss += config['lambda_kl'] * loss_kl
+                if config['lambda_penalty'] > 0:
+                    loss += config['lambda_penalty'] * loss_penalty
+            elif config['model_name'] == 'LSSL' and config['lambda_dir_a'] > 0:
                 loss_dir_a = model.compute_direction_loss(zs)
+                loss += config['lambda_dir_a'] * loss_dir_a
                 loss_dir_d = torch.tensor(0.)
                 loss_kl = torch.tensor(0.)
                 loss_penalty = torch.tensor(0.)
             else:
-                if config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0:
-                    loss_dir_a, loss_dir_d, loss_kl, loss_penalty = model.compute_direction_loss(zs, label, interval)
-                    if config['lambda_dir_a'] > 0:
-                        loss += config['lambda_dir_a'] * loss_dir_a
-                    if config['lambda_dir_d'] > 0:
-                        loss += config['lambda_dir_d'] * loss_dir_d
-                    if config['lambda_kl'] > 0:
-                        loss += config['lambda_kl'] * loss_kl
-                    if config['lambda_penalty'] > 0:
-                        loss += config['lambda_penalty'] * loss_penalty
-                else:
-                    loss_dir_a = torch.tensor(0.)
-                    loss_dir_d = torch.tensor(0.)
-                    loss_kl = torch.tensor(0.)
-                    loss_penalty = torch.tensor(0.)
+                loss_dir_a = torch.tensor(0.)
+                loss_dir_d = torch.tensor(0.)
+                loss_kl = torch.tensor(0.)
+                loss_penalty = torch.tensor(0.)
 
             loss_all_dict['all'] += loss.item()
             loss_all_dict['recon'] += loss_recon.item()
@@ -282,10 +292,10 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
 
 
             if phase == 'test' and save_res:
-                # img1_list.append(img1.detach().cpu().numpy())
-                # img2_list.append(img2.detach().cpu().numpy())
-                # recon1_list.append(recons[0].detach().cpu().numpy())
-                # recon2_list.append(recons[1].detach().cpu().numpy())
+                img1_list.append(img1.detach().cpu().numpy())
+                img2_list.append(img2.detach().cpu().numpy())
+                recon1_list.append(recons[0].detach().cpu().numpy())
+                recon2_list.append(recons[1].detach().cpu().numpy())
                 z1_list.append(zs[0].detach().cpu().numpy())
                 z2_list.append(zs[1].detach().cpu().numpy())
                 interval_list.append(interval.detach().cpu().numpy())
@@ -300,10 +310,10 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
 
         if phase == 'test' and save_res:
             # pdb.set_trace()
-            # img1_list = np.concatenate(img1_list, axis=0)
-            # img2_list = np.concatenate(img2_list, axis=0)
-            # recon1_list = np.concatenate(recon1_list, axis=0)
-            # recon2_list = np.concatenate(recon2_list, axis=0)
+            img1_list = np.concatenate(img1_list, axis=0)
+            img2_list = np.concatenate(img2_list, axis=0)
+            recon1_list = np.concatenate(recon1_list, axis=0)
+            recon2_list = np.concatenate(recon2_list, axis=0)
             z1_list = np.concatenate(z1_list, axis=0)
             z2_list = np.concatenate(z2_list, axis=0)
             interval_list = np.concatenate(interval_list, axis=0)
@@ -315,10 +325,10 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             else:
                 da, dd = model.compute_directions()
             h5_file = h5py.File(path, 'w')
-            # h5_file.create_dataset('img1', data=img1_list)
-            # h5_file.create_dataset('img2', data=img2_list)
-            # h5_file.create_dataset('recon1', data=recon1_list)
-            # h5_file.create_dataset('recon2', data=recon2_list)
+            h5_file.create_dataset('img1', data=img1_list)
+            h5_file.create_dataset('img2', data=img2_list)
+            h5_file.create_dataset('recon1', data=recon1_list)
+            h5_file.create_dataset('recon2', data=recon2_list)
             h5_file.create_dataset('label', data=label_list)
             h5_file.create_dataset('z1', data=z1_list)
             h5_file.create_dataset('z2', data=z2_list)
