@@ -1,27 +1,27 @@
 
-# phase: 'train'
-phase: 'test'
+phase: 'train'
+# phase: 'test'
 load_yaml: True
-gpu: '0'
+gpu: '2'
 
 # pretraining setting
-# continue_train: False
-continue_train: True
+continue_train: False
+# continue_train: True
 ckpt_name: 'model_best.pth.tar'
 # ckpt_name: 'pretrained_model_best.pth.tar'      ###################
 # ckpt_name: 'epoch197.pth.tar'
 
 # dataset
-data_type: 'pair'
-dataset_name: 'ADNI'
-data_path: '../data/ADNI/'
-# img_file_name: 'ADNI_longitudinal_img.h5'
-img_file_name: 'ADNI_longitudinal_img_aug.h5'
-noimg_file_name: 'ADNI_longitudinal_noimg.h5'
-subj_list_postfix: 'NC_AD_pMCI_sMCI'          ###################
-# subj_list_postfix: 'NC'
-# subj_list_postfix: 'NC_AD'
-# subj_list_postfix: 'pMCI_sMCI'
+# data_type: 'pair'
+# dataset_name: 'ADNI'
+# data_path: '../data/ADNI/'
+# # img_file_name: 'ADNI_longitudinal_img.h5'
+# img_file_name: 'ADNI_longitudinal_img_aug.h5'
+# noimg_file_name: 'ADNI_longitudinal_noimg.h5'
+# subj_list_postfix: 'NC_AD_pMCI_sMCI'          ###################
+# # subj_list_postfix: 'NC'
+# # subj_list_postfix: 'NC_AD'
+# # subj_list_postfix: 'pMCI_sMCI'
 
 # data_type: 'pair'
 # # data_type: 'single'
@@ -32,21 +32,34 @@ subj_list_postfix: 'NC_AD_pMCI_sMCI'          ###################
 # noimg_file_name: 'LAB_longitudinal_noimg.h5'
 # # subj_list_postfix: 'C_E_HE_far'
 # # subj_list_postfix: 'C_E_HE'
-# # subj_list_postfix: 'C_E_H_HE'
-# subj_list_postfix: 'C_E_H'
+# subj_list_postfix: 'C_E_H_HE'
+# # subj_list_postfix: 'C_E_H'
+# # subj_list_postfix: 'C_H_HE'
 # # subj_list_postfix: 'C_single'
 # # subj_list_postfix: 'C'
+# # label_list: [[0], [1], [2]]
+# label_list: [[0], [1,3], [2,3]]
+
+data_type: 'pair'
+dataset_name: 'ADNI_LAB'
+data_path: ['../data/ADNI/', '../data/LAB/']
+# img_file_name: 'ADNI_longitudinal_img.h5'
+img_file_name: ['ADNI_longitudinal_img_aug.h5', 'LAB_longitudinal_img_aug.h5']
+noimg_file_name: ['ADNI_longitudinal_noimg.h5', 'LAB_longitudinal_noimg.h5']
+subj_list_postfix: 'NC_AD_pMCI_sMCI_C_H_HE'
+label_list: [[0,5], [2,3,4], [7,8]]
+
 
 # training setting
-epochs: 200
+epochs: 100
 batch_size: 64
 num_fold: 5
 fold: 0
 shuffle: True
 # lr: 0.0005
 lr: 0.0001
-# aug: True
-aug: False
+aug: True
+# aug: False
 # use_feature: ['z', 'delta_z']
 use_feature: ['z']
 # pos_weight: [1.4]
@@ -62,32 +75,58 @@ num_neighbours: 5
 agg_method: 'gaussian'
 
 # model_name: 'LDDM'
-model_name: 'LDD'       ####################
-# model_name: 'LSSL'       # longitudinal direction disentangle
+# model_name: 'LDD'       ####################
+model_name: 'LSSL'       # longitudinal direction disentangle
 # model_name: 'CLS'       # encoder + classifier
-lambda_recon: 4.
-lambda_dir_a: 2.
-lambda_dir_d: 1.
+lambda_recon: 2.
+lambda_dir_a: 1.
+lambda_dir_d: 0.
 lambda_cls: 0.
 lambda_kl: 0.
 lambda_penalty: 0.      ###################
 
-lambda_dir: 1.
+lambda_dir: 0.
 lambda_dis: 0.
 
-label_list: [[0], [1], [2]]
+enc_dec_type: 'simple'
 
 
 # LDD on ADNI
 # ckpt_timelabel: '2021_4_13_10_43'         # step 1: LSSL on all
+# ckpt_timelabel: '2021_5_17_18_16'           # step 1: LSSL, based on 2021_4_13_10_43, froze encoder
 # ckpt_timelabel: '2021_4_22_22_14'         # step 2: LDD, based on LSSL on all 2021_4_13_10_43
-ckpt_timelabel: '2021_4_22_22_19'         # step 3: LDD, based on 2021_4_22_22_14 ######### 4/22
+# ckpt_timelabel: '2021_4_22_22_19'         # step 3: LDD, based on 2021_4_22_22_14 ######### 4/22
+# ckpt_timelabel: '2021_5_17_18_28'         # step 3: LDD, based on 2021_4_22_22_19, froze encoder
 
 # ckpt_timelabel: '2021_5_3_22_38'            # step 4: LDD, based on 2021_4_22_22_14, 97685, gpu 1
 
 # ckpt_timelabel: '2021_5_3_22_11'            # step 2: LDD, based on LSSL on all 2021_4_13_10_43, only use ad to regularize
 # ckpt_timelabel: '2021_5_3_22_12'            # step 3: LDD, based on 2021_5_3_22_11, only use ad to regularize
 
+# Simple model
+# ckpt_timelabel: '2021_5_17_21_19'         # step 1: LSSL on all, 97685
+
+
 # LDD on LAB
 # ckpt_timelabel: '2021_5_10_16_9'         # step 1: LSSL on C+E+H+HE, 2,1,0,0,0
 # ckpt_timelabel: '2021_5_10_16_10'         # step 2: LDDM 2021_5_10_16_9, loss: 4,2,1,0,0
+# ckpt_timelabel: '2021_5_10_16_11'         # step 3: LDDM 2021_5_10_16_10, loss: 4,2,1,1,1
+
+# ckpt_timelabel: '2021_5_10_16_12'         # step 2: LDD 2021_5_10_16_10, loss: 2,1,1,0,0, on C+H
+
+# ckpt_timelabel: '2021_5_10_16_13'         # step 2: LDDM 2021_5_10_16_10, loss: 4,2,1,0,0, on C+E+H+HE
+# ckpt_timelabel: '2021_5_10_16_14'         # step 3: LDDM 2021_5_10_16_13, loss: 4,2,1,1,1, on C+E+H+HE
+# ckpt_timelabel: '2021_5_10_16_17'         # step 2: LDDM 2021_5_10_16_13, loss: 4,2,1,1,1, on C+E+H+HE, new penalty loss
+
+# ckpt_timelabel: '2021_5_10_16_15'         # step 2: LDDM 2021_5_10_16_9, loss: 4,2,1,0,0, on C+E+H+HE
+# ckpt_timelabel: '2021_5_10_16_16'         # step 2: LDDM 2021_5_10_16_10, loss: 4,2,1,1,1, on C+E+H+HE
+
+# ckpt_timelabel: '2021_5_17_16_45'         # step 2: LDDM 2021_5_10_16_9, loss: 4,2,1,0,0, on C+E+H+HE, semi-sup for HE
+
+
+# Simple model
+# ckpt_timelabel: '2021_5_17_21_18'         # step 1: LSSL on C+E+H+HE, 90564
+
+
+# LDD on ADNI + HIV in LAB
+ckpt_timelabel: '2021_5_17_22_1'         # step 1: LSSL on C+E+H+HE, 98350

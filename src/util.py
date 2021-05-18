@@ -93,6 +93,43 @@ class LongitudinalPairDataset(Dataset):
 
         return {'img1': img1, 'img2': img2, 'label': label, 'interval': interval, 'age': age}
 
+class LongitudinalPairDatasetMix(Dataset):
+    def __init__(self, dataset_name, data_img_list, data_noimg_list, subj_id_list, case_id_list, dataset_idx_list, aug=False):
+        self.data_img_list = data_img_list
+        self.data_noimg_list = data_noimg_list
+        self.subj_id_list = subj_id_list
+        self.case_id_list = case_id_list
+        self.dataset_idx_list = dataset_idx_list
+        self.aug = aug
+
+    def __len__(self):
+        return len(self.subj_id_list)
+
+    def __getitem__(self, idx):
+        dataset_idx = self.dataset_idx_list[idx]
+        subj_id = self.subj_id_list[idx]
+        case_id_1 = self.case_id_list[0][idx]
+        case_id_2 = self.case_id_list[1][idx]
+        case_order_1 = self.case_id_list[2][idx]
+        case_order_2 = self.case_id_list[3][idx]
+        if dataset_idx == 0:
+            label = np.array(self.data_noimg_list[dataset_idx][subj_id]['label'])
+        else:
+            label = np.array(self.data_noimg_list[dataset_idx][subj_id]['label']) + 5
+        # label_all = np.array(self.data_noimg[subj_id]['label_all'])[[case_order_1, case_order_2]]
+        interval = np.array(self.data_noimg_list[dataset_idx][subj_id]['date_interval'][case_order_2] - self.data_noimg_list[dataset_idx][subj_id]['date_interval'][case_order_1])
+        age = np.array(self.data_noimg_list[dataset_idx][subj_id]['age'] + self.data_noimg_list[dataset_idx][subj_id]['date_interval'][case_order_1])
+        # print(subj_id, case_order_1, case_order_2, label_all, interval)
+
+        if self.aug:
+            rand_idx = np.random.randint(0, 10)
+        else:
+            rand_idx = 0
+        img1 = np.array(self.data_img_list[dataset_idx][subj_id][case_id_1][rand_idx])
+        img2 = np.array(self.data_img_list[dataset_idx][subj_id][case_id_2][rand_idx])
+
+        return {'img1': img1, 'img2': img2, 'label': label, 'interval': interval, 'age': age}
+
 class LongitudinalData(object):
     def __init__(self, dataset_name, data_path, img_file_name='ADNI_longitudinal_img.h5',
                 noimg_file_name='ADNI_longitudinal_noimg.h5', subj_list_postfix='NC_AD', data_type='single',
@@ -115,7 +152,22 @@ class LongitudinalData(object):
                 test_dataset = LongitudinalPairDataset(dataset_name, data_img, data_noimg, subj_id_list_test, case_id_list_test, aug=False)
             else:
                 raise ValueError('Did not support pair or sequential data yet')
+        elif dataset_name == 'ADNI_LAB':
+            data_img_list = [h5py.File(os.path.join(data_path[0], img_file_name[0]), 'r'),
+                            h5py.File(os.path.join(data_path[1], img_file_name[1]), 'r')]
+            data_noimg_list = [h5py.File(os.path.join(data_path[0], noimg_file_name[0]), 'r'),
+                            h5py.File(os.path.join(data_path[1], noimg_file_name[1]), 'r')]
 
+            subj_id_list_train, case_id_list_train, dataset_idx_list_train = self.load_idx_list_mix(os.path.join('../data/ADNI_LAB/fold'+str(fold)+'_train_'+subj_list_postfix+'.txt'), data_type)
+            subj_id_list_val, case_id_list_val, dataset_idx_list_val = self.load_idx_list_mix(os.path.join('../data/ADNI_LAB/fold'+str(fold)+'_val_'+subj_list_postfix+'.txt'), data_type)
+            subj_id_list_test, case_id_list_test, dataset_idx_list_test = self.load_idx_list_mix(os.path.join('../data/ADNI_LAB/fold'+str(fold)+'_test_'+subj_list_postfix+'.txt'), data_type)
+
+            if data_type == 'pair':
+                train_dataset = LongitudinalPairDatasetMix(dataset_name, data_img_list, data_noimg_list, subj_id_list_train, case_id_list_train, dataset_idx_list_train, aug=aug)
+                val_dataset = LongitudinalPairDatasetMix(dataset_name, data_img_list, data_noimg_list, subj_id_list_val, case_id_list_val, dataset_idx_list_val, aug=False)
+                test_dataset = LongitudinalPairDatasetMix(dataset_name, data_img_list, data_noimg_list, subj_id_list_test, case_id_list_test, dataset_idx_list_test, aug=False)
+            else:
+                raise ValueError('Did not support pair or sequential data yet')
         else:
             raise ValueError('Not support this dataset!')
 
@@ -131,6 +183,13 @@ class LongitudinalData(object):
             return np.array(lines.iloc[:,0]), [np.array(lines.iloc[:,1]), np.array(lines.iloc[:,2])]
         elif data_type == 'pair':
             return np.array(lines.iloc[:,0]), [np.array(lines.iloc[:,1]),np.array(lines.iloc[:,2]),np.array(lines.iloc[:,3]),np.array(lines.iloc[:,4])]
+        else:
+            raise ValueError('Not support sequential data type')
+
+    def load_idx_list_mix(self, file_path, data_type):
+        lines = pd.read_csv(file_path, sep=" ", header=None)
+        if data_type == 'pair':
+            return np.array(lines.iloc[:,0]), [np.array(lines.iloc[:,1]),np.array(lines.iloc[:,2]),np.array(lines.iloc[:,3]),np.array(lines.iloc[:,4])], np.array(lines.iloc[:,5])
         else:
             raise ValueError('Not support sequential data type')
 
@@ -261,10 +320,12 @@ def compute_average_brain_no_disease(path, model, da, z_list, age_list, age_thre
 
     z_mean_list = []
     age_min, age_max = age_list.min(), age_list.max()
+    # age_min, age_max = 20, 90
     da_min, da_max = np.percentile(proj_da_val, 5), np.percentile(proj_da_val, 95)
     proj_other = z_list - proj_da_val * np.tile(da_norm, [proj_da_val.shape[0],1])
     proj_other_mean = np.mean(proj_other, 0)
     z_mean_age_list = []
+    # for age in range(40, 100, 10):
     for age in range(age_thres[0], age_thres[1]+1, age_interval):
         da_age = (age - age_thres[0]) / (age_thres[1] - age_thres[0]) * (da_max - da_min) + da_min
         z_mean = da_age * da_norm + proj_other_mean
