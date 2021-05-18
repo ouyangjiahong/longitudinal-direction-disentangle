@@ -15,11 +15,9 @@ np.random.seed(seed)
 
 
 # preprocess subject label and data
-csv_path = '/data/jiahong/data/ADNI/ADNI1AND2.csv'      # label for subject (Normal, AD, MCI)
-csv_path_raw = '/data/jiahong/data/ADNI/ADNIMERGE.csv'  # label for each timepoint (CN, AD, Demantia, MCI, LMCI, EMCI)
-data_path = '/data/jiahong/data/ADNI/img_64_longitudinal/'
-df = pd.read_csv(csv_path)
-df_raw = pd.read_csv(csv_path_raw, usecols=['PTID', 'DX_bl', 'DX', 'EXAMDATE', 'AGE'])
+csv_path = '/data/jiahong/data/LAB/demographics_lab_full.csv'      # label for subject (C, E, H)
+data_path = '/data/jiahong/data/LAB/img_64_longitudinal/'
+df_raw = pd.read_csv(csv_path, usecols=['subject', 'demo_diag', 'demo_dob', 'demo_sex'])
 
 
 # load label, age, image paths
@@ -27,8 +25,7 @@ df_raw = pd.read_csv(csv_path_raw, usecols=['PTID', 'DX_bl', 'DX', 'EXAMDATE', '
 struct subj_data
 
 age: baseline age,
-label: label for the subject, 0 - NC, 2 - AD, 3 - sMCI, 4 - pMCI
-label_all: list of labels for each timestep, 0 - NC, 1 - MCI, 2 - AD
+label: label for the subject, 0 - C, 1 - E, 2 - H, 3 - HE
 date_start: baseline date, in datetime format
 date: list of dates, in datetime format
 date_interval: list of intervals, in year
@@ -38,105 +35,75 @@ img_paths: list of image paths
 img_paths = glob.glob(data_path+'*.nii.gz')
 img_paths = sorted(img_paths)
 subj_data = {}
-label_dict = {'Normal': 0, 'NC': 0, 'CN': 0, 'MCI': 1, 'LMCI': 1, 'EMCI': 1, 'AD': 2, 'Dementia': 2, 'sMCI':3, 'pMCI':4}
+label_dict = {'C': 0, 'E': 1, 'H': 2, 'HE': 3}
 nan_label_count = 0
 nan_idx_list = []
 for img_path in img_paths:
     subj_id = os.path.basename(img_path).split('-')[0]
-    date = os.path.basename(img_path).split('-')[1] + '-' + os.path.basename(img_path).split('-')[2] + '-' + os.path.basename(img_path).split('-')[3].split('_')[0]
-    date_struct = datetime.strptime(date, '%Y-%m-%d')
-    rows = df_raw.loc[(df_raw['PTID'] == subj_id)]
+    date = os.path.basename(img_path).split('-')[1].split('.')[0]
+    # date = os.path.basename(img_path).split('-')[1] + '-' + os.path.basename(img_path).split('-')[2] + '-' + os.path.basename(img_path).split('-')[3].split('_')[0]
+    date_struct = datetime.strptime(date, '%Y%m%d')
+    rows = df_raw.loc[(df_raw['subject'] == subj_id)]
     if rows.shape[0] == 0:
         print('Missing label for', subj_id)
     else:
-        # matching date
-        date_diff = []
-        for i in range(rows.shape[0]):
-            date_struct_now = datetime.strptime(rows.iloc[i]['EXAMDATE'], '%Y-%m-%d')
-            date_diff.append(abs((date_struct_now - date_struct).days))
-        i = np.argmin(date_diff)
-        if date_diff[i] > 120:
-            print('Missing label for', subj_id, date_diff[i], date_struct)
-            continue
-
         # build dict
-        if subj_id not in subj_data:
-            subj_data[subj_id] = {'age': rows.iloc[i]['AGE'], 'label_all': [], 'label': label_dict[rows.iloc[i]['DX_bl']], 'date': [], 'date_start': date_struct, 'date_interval': [], 'img_paths': []}
-
-        if rows.iloc[i]['EXAMDATE'] in subj_data[subj_id]['date']:
-            print('Multiple image at same date', subj_id, rows.iloc[i]['EXAMDATE'])
+        label = rows.iloc[0]['demo_diag']
+        if label not in label_dict.keys(): # ignore other labels
             continue
+        if subj_id not in subj_data:
+            dob =  rows.iloc[0]['demo_dob']
+            if dob == 'NaT':
+                pdb.set_trace()
+            age = (date_struct - datetime.strptime(dob, '%Y-%m-%d')).days / 365.
+            subj_data[subj_id] = {'age': age, 'label': label_dict[rows.iloc[0]['demo_diag']], 'date': [], 'date_start': date_struct, 'date_interval': [], 'img_paths': []}
 
-        subj_data[subj_id]['date'].append(rows.iloc[i]['EXAMDATE'])
+        subj_data[subj_id]['date'].append(date)
         subj_data[subj_id]['date_interval'].append((date_struct - subj_data[subj_id]['date_start']).days / 365.)
         subj_data[subj_id]['img_paths'].append(os.path.basename(img_path))
-        if pd.isnull(rows.iloc[i]['DX']) == False:
-            subj_data[subj_id]['label_all'].append(label_dict[rows.iloc[i]['DX']])
-        else:
-            nan_label_count += 1
-            nan_idx_list.append([subj_id, len(subj_data[subj_id]['label_all'])])
-            subj_data[subj_id]['label_all'].append(-1)
 
-# fill nan
-print('Number of nan label:', nan_label_count)
-for subj in nan_idx_list:
-    subj_data[subj[0]]['label_all'][subj[1]] = subj_data[subj[0]]['label_all'][subj[1]-1]
-    if subj_data[subj[0]]['label_all'][subj[1]] == -1:
-        print(subj)
 
 # get sMCI, pMCI labels
-num_ts_nc = 0
-num_ts_ad = 0
-num_ts_mci = 0
-num_nc = 0
-num_ad = 0
-num_smci = 0
-num_pmci = 0
-subj_list_dict = {'NC':[], 'sMCI':[], 'pMCI': [], 'AD': []}
+num_ts_c = 0
+num_ts_h = 0
+num_ts_e = 0
+num_ts_he = 0
+num_c = 0
+num_h = 0
+num_e = 0
+num_he = 0
+subj_list_dict = {'C':[], 'H':[], 'E': [], 'HE': []}
 for subj_id in subj_data.keys():
-    if len(list(set(subj_data[subj_id]['label_all']))) != 1:    # have NC/MCI/AD mix in timesteps
-        print(subj_id, subj_data[subj_id]['label_all'])
-        if list(set(subj_data[subj_id]['label_all'])) == [1,2] or list(set(subj_data[subj_id]['label_all'])) == [2,1] or list(set(subj_data[subj_id]['label_all'])) == [0,1,2]:
-            subj_data[subj_id]['label'] = 4
-            num_pmci += 1
-            subj_list_dict['pMCI'].append(subj_id)
-        elif list(set(subj_data[subj_id]['label_all'])) == [0,1] or list(set(subj_data[subj_id]['label_all'])) == [1,0]:
-            subj_data[subj_id]['label'] = 3
-            num_smci += 1
-            subj_list_dict['sMCI'].append(subj_id)
-        elif list(set(subj_data[subj_id]['label_all'])) == [0,2] or list(set(subj_data[subj_id]['label_all'])) == [2,0]:
-            subj_data[subj_id]['label'] = 2
-            num_ad += 1
-            subj_list_dict['AD'].append(subj_id)
-    elif subj_data[subj_id]['label'] == 1:  # sMCI
-        subj_data[subj_id]['label'] = 3
-        num_smci += 1
-        subj_list_dict['sMCI'].append(subj_id)
-    elif subj_data[subj_id]['label'] == 0:  # NC
-        num_nc += 1
-        subj_list_dict['NC'].append(subj_id)
+    if subj_data[subj_id]['label'] == 0:
+        num_c += 1
+        num_ts_c += len(subj_data[subj_id]['img_paths'])
+        subj_list_dict['C'].append(subj_id)
+    elif subj_data[subj_id]['label'] == 1:
+        num_e += 1
+        num_ts_e += len(subj_data[subj_id]['img_paths'])
+        subj_list_dict['E'].append(subj_id)
+    elif subj_data[subj_id]['label'] == 2:
+        num_h += 1
+        num_ts_h += len(subj_data[subj_id]['img_paths'])
+        subj_list_dict['H'].append(subj_id)
     else:
-        num_ad += 1
-        subj_list_dict['AD'].append(subj_id)
-    label_all = np.array(subj_data[subj_id]['label_all'])
-    num_ts_nc += (label_all==0).sum()
-    num_ts_mci += (label_all==1).sum()
-    num_ts_ad += (label_all==2).sum()
-print('Number of timesteps, NC/MCI/AD:', num_ts_nc, num_ts_mci, num_ts_ad)
-print('Number of subject, NC/sMCI/pMCI/AD:', num_nc, num_smci, num_pmci, num_ad)
+        num_he += 1
+        num_ts_he += len(subj_data[subj_id]['img_paths'])
+        subj_list_dict['HE'].append(subj_id)
+
+print('Number of timesteps, C/E/H/HE:', num_ts_c, num_ts_e, num_ts_h, num_ts_he)
+print('Number of subject, C/E/H/HE:', num_c, num_e, num_h, num_he)
 
 # save subj_list_dict to npy
-np.save('/data/jiahong/data/ADNI/ADNI_longitudinal_subj.npy', subj_list_dict)
+np.save('/data/jiahong/data/LAB/LAB_longitudinal_subj.npy', subj_list_dict)
 
 # statistics about timesteps
 max_timestep = 0
 num_cls = [0,0,0,0,0]
-num_ts = [0,0,0,0,0,0,0,0,0]
-counts = np.zeros((5, 8))
+num_ts = np.zeros((15,))
+counts = np.zeros((4, 15))
 for subj_id, info in subj_data.items():
     num_timestep = len(info['img_paths'])
-    if len(info['label_all']) != num_timestep or len(info['date_interval']) != num_timestep:
-        print('Different number of timepoint', subj_id)
     max_timestep = max(max_timestep, num_timestep)
     num_cls[info['label']] += 1
     num_ts[num_timestep] += 1
@@ -145,10 +112,10 @@ print('Number of subjects: ', len(subj_data))
 print('Max number of timesteps: ', max_timestep)
 print('Number of each timestep', num_ts)
 print('Number of each class', num_cls)
-print('NC', counts[0])
-print('sMCI', counts[3])
-print('pMCI', counts[4])
-print('AD', counts[2])
+print('C', counts[0])
+print('E', counts[1])
+print('H', counts[2])
+print('HE', counts[3])
 
 counts_cum = counts.copy()
 for i in range(counts.shape[1]-2, 0, -1):
@@ -156,31 +123,33 @@ for i in range(counts.shape[1]-2, 0, -1):
 print(counts_cum)
 
 # save subj_data to h5
-h5_noimg_path = '/data/jiahong/data/ADNI/ADNI_longitudinal_noimg.h5'
+pdb.set_trace()
+h5_noimg_path = '/data/jiahong/data/LAB/LAB_longitudinal_noimg.h5'
 if not os.path.exists(h5_noimg_path):
     f_noimg = h5py.File(h5_noimg_path, 'a')
     for i, subj_id in enumerate(subj_data.keys()):
         subj_noimg = f_noimg.create_group(subj_id)
         subj_noimg.create_dataset('label', data=subj_data[subj_id]['label'])
-        subj_noimg.create_dataset('label_all', data=subj_data[subj_id]['label_all'])
+        # subj_noimg.create_dataset('label_all', data=subj_data[subj_id]['label_all'])
         # subj_noimg.create_dataset('date_start', data=subj_data[subj_id]['date_start'])
         subj_noimg.create_dataset('date_interval', data=subj_data[subj_id]['date_interval'])
         subj_noimg.create_dataset('age', data=subj_data[subj_id]['age'])
         # subj_noimg.create_dataset('img_paths', data=subj_data[subj_id]['img_paths'])
 
 # save images to h5
-h5_img_path = '/data/jiahong/data/ADNI/ADNI_longitudinal_img.h5'
-if not os.path.exists(h5_img_path):
-    f_img = h5py.File(h5_img_path, 'a')
-    for i, subj_id in enumerate(subj_data.keys()):
-        subj_img = f_img.create_group(subj_id)
-        img_paths = subj_data[subj_id]['img_paths']
-        for img_path in img_paths:
-            img_nib = nib.load(os.path.join(data_path,img_path))
-            img = img_nib.get_fdata()
-            img = (img - np.mean(img)) / np.std(img)
-            subj_img.create_dataset(os.path.basename(img_path), data=img)
-        print(i, subj_id)
+# pdb.set_trace()
+# h5_img_path = '/data/jiahong/data/LAB/LAB_longitudinal_img.h5'
+# if not os.path.exists(h5_img_path):
+#     f_img = h5py.File(h5_img_path, 'a')
+#     for i, subj_id in enumerate(subj_data.keys()):
+#         subj_img = f_img.create_group(subj_id)
+#         img_paths = subj_data[subj_id]['img_paths']
+#         for img_path in img_paths:
+#             img_nib = nib.load(os.path.join(data_path,img_path))
+#             img = img_nib.get_fdata()
+#             img = (img - np.mean(img)) / np.std(img)
+#             subj_img.create_dataset(os.path.basename(img_path), data=img)
+#         print(i, subj_id)
 
 def augment_image(img, rotate, shift, flip):
     # pdb.set_trace()
@@ -192,7 +161,7 @@ def augment_image(img, rotate, shift, flip):
         img = np.flip(img, 0) - np.zeros_like(img)
     return img
 
-h5_img_path = '/data/jiahong/data/ADNI/ADNI_longitudinal_img_aug.h5'
+h5_img_path = '/data/jiahong/data/LAB/LAB_longitudinal_img_aug2.h5'
 aug_size = 10
 if not os.path.exists(h5_img_path):
     f_img = h5py.File(h5_img_path, 'a')
@@ -218,6 +187,15 @@ def save_data_txt(path, subj_id_list, case_id_list):
         for subj_id, case_id in zip(subj_id_list, case_id_list):
             ft.write(subj_id+' '+case_id+'\n')
 
+def get_subj_case_id_list(subj_data, subj_id_list):
+    subj_id_list_full = []
+    case_id_list_full = []
+    for subj_id in subj_id_list:
+        case_id_list = subj_data[subj_id]['img_paths']
+        case_id_list_full.extend(case_id_list)
+        subj_id_list_full.extend([subj_id] * len(case_id_list))
+    return subj_id_list_full, case_id_list_full
+
 # save txt, subj_id, case_id, case_number, case_id, case_number
 def save_pair_data_txt(path, subj_id_list, case_id_list):
     with open(path, 'w') as ft:
@@ -236,14 +214,14 @@ def get_subj_pair_case_id_list(subj_data, subj_id_list):
         case_id_list = subj_data[subj_id]['img_paths']
         for i in range(len(case_id_list)):
             for j in range(i+1, len(case_id_list)):
-                subj_id_list_full.append(subj_id)
-                case_id_list_full.append([case_id_list[i],case_id_list[j],i,j])
+                # subj_id_list_full.append(subj_id)
+                # case_id_list_full.append([case_id_list[i],case_id_list[j],i,j])
 
                 # pdb.set_trace()
                 # filter out pairs that are too close
-                # if subj_data[subj_id]['date_interval'][j] - subj_data[subj_id]['date_interval'][i] >= 2:
-                #     subj_id_list_full.append(subj_id)
-                #     case_id_list_full.append([case_id_list[i],case_id_list[j],i,j])
+                if subj_data[subj_id]['date_interval'][j] - subj_data[subj_id]['date_interval'][i] >= 0.8:
+                    subj_id_list_full.append(subj_id)
+                    case_id_list_full.append([case_id_list[i],case_id_list[j],i,j])
     return subj_id_list_full, case_id_list_full
 
 def get_subj_single_case_id_list(subj_data, subj_id_list):
@@ -261,21 +239,22 @@ pdb.set_trace()
 # subj_list_postfix = 'NC_AD_pMCI_sMCI_far'
 # subj_list_postfix = 'NC_AD'
 # subj_list_postfix = 'pMCI_sMCI'
-# subj_list_postfix = 'NC'
-subj_list_postfix = 'AD_pMCI_sMCI'
-subj_id_all = np.load('/data/jiahong/data/ADNI/ADNI_longitudinal_subj.npy', allow_pickle=True).item()
-
+# subj_list_postfix = 'C_E_HE_far'
+# subj_list_postfix = 'C_single'
+# subj_list_postfix = 'C'
+# subj_list_postfix = 'C_E_H_HE'
+# subj_list_postfix = 'C_E_H'
+subj_list_postfix = 'C_H_HE'
+subj_id_all = np.load('/data/jiahong/data/LAB/LAB_longitudinal_subj.npy', allow_pickle=True).item()
 
 for fold in range(5):
-    # for class_name in ['NC', 'AD', 'pMCI', 'sMCI']:
-    # for class_name in ['NC', 'AD']:
-    # for class_name in ['pMCI', 'sMCI']:
-    # for class_name in ['NC']:
     subj_list = []
     subj_test_list = []
     subj_val_list = []
     subj_train_list = []
-    for class_name in ['AD', 'pMCI', 'sMCI']:
+    
+    for class_name in ['C', 'H', 'HE']:
+    # for class_name in ['C']:
         class_list = subj_id_all[class_name]
         np.random.shuffle(class_list)
         num_class = len(class_list)
@@ -293,14 +272,14 @@ for fold in range(5):
         subj_id_list_val, case_id_list_val = get_subj_single_case_id_list(subj_data, subj_val_list)
         subj_id_list_test, case_id_list_test = get_subj_single_case_id_list(subj_data, subj_test_list)
 
-        save_single_data_txt('../data/ADNI/fold'+str(fold)+'_train_' + subj_list_postfix + '.txt', subj_id_list_train, case_id_list_train)
-        save_single_data_txt('../data/ADNI/fold'+str(fold)+'_val_' + subj_list_postfix + '.txt', subj_id_list_val, case_id_list_val)
-        save_single_data_txt('../data/ADNI/fold'+str(fold)+'_test_' + subj_list_postfix + '.txt', subj_id_list_test, case_id_list_test)
+        save_single_data_txt('../data/LAB/fold'+str(fold)+'_train_' + subj_list_postfix + '.txt', subj_id_list_train, case_id_list_train)
+        save_single_data_txt('../data/LAB/fold'+str(fold)+'_val_' + subj_list_postfix + '.txt', subj_id_list_val, case_id_list_val)
+        save_single_data_txt('../data/LAB/fold'+str(fold)+'_test_' + subj_list_postfix + '.txt', subj_id_list_test, case_id_list_test)
     else:
         subj_id_list_train, case_id_list_train = get_subj_pair_case_id_list(subj_data, subj_train_list)
         subj_id_list_val, case_id_list_val = get_subj_pair_case_id_list(subj_data, subj_val_list)
         subj_id_list_test, case_id_list_test = get_subj_pair_case_id_list(subj_data, subj_test_list)
 
-        save_pair_data_txt('../data/ADNI/fold'+str(fold)+'_train_' + subj_list_postfix + '.txt', subj_id_list_train, case_id_list_train)
-        save_pair_data_txt('../data/ADNI/fold'+str(fold)+'_val_' + subj_list_postfix + '.txt', subj_id_list_val, case_id_list_val)
-        save_pair_data_txt('../data/ADNI/fold'+str(fold)+'_test_' + subj_list_postfix + '.txt', subj_id_list_test, case_id_list_test)
+        save_pair_data_txt('../data/LAB/fold'+str(fold)+'_train_' + subj_list_postfix + '.txt', subj_id_list_train, case_id_list_train)
+        save_pair_data_txt('../data/LAB/fold'+str(fold)+'_val_' + subj_list_postfix + '.txt', subj_id_list_val, case_id_list_val)
+        save_pair_data_txt('../data/LAB/fold'+str(fold)+'_test_' + subj_list_postfix + '.txt', subj_id_list_test, case_id_list_test)
