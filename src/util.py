@@ -271,7 +271,7 @@ def compute_average_brain_no_disease(path, model, da, z_list, age_list, age_thre
         z_mean_age_list.append(z_mean)
     z_mean_list = np.concatenate(z_mean_age_list, 0)
     recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
-    recons = recons.view(len(label_class), -1, 64, 64, 64).detach().cpu().numpy()
+    recons = recons.view(1, -1, 64, 64, 64).detach().cpu().numpy()
     np.save(path, recons)
 
 def compute_average_brain_one_disease(path, model, da, dd, z_list, label_list, age_list, age_thres=[60,85], age_interval=5):
