@@ -252,6 +252,28 @@ def compute_classification_metrics(label, pred, postfix='NC_AD'):
         print(auc, bacc, sen, spe)
         return bacc
 
+def compute_average_brain_no_disease(path, model, da, z_list, age_list, age_thres=[60,85], age_interval=5):
+    idx_list = np.logical_and(age_list>age_thres[0], age_list<age_thres[1])
+    z_list = z_list[idx_list]
+    age_list = age_list[idx_list]
+    da_norm = da / np.linalg.norm(da)
+    proj_da_val = np.dot(z_list, np.transpose(da_norm))
+
+    z_mean_list = []
+    age_min, age_max = age_list.min(), age_list.max()
+    da_min, da_max = np.percentile(proj_da_val, 5), np.percentile(proj_da_val, 95)
+    proj_other = z_list - proj_da_val * np.tile(da_norm, [proj_da_val.shape[0],1])
+    proj_other_mean = np.mean(proj_other, 0)
+    z_mean_age_list = []
+    for age in range(age_thres[0], age_thres[1]+1, age_interval):
+        da_age = (age - age_thres[0]) / (age_thres[1] - age_thres[0]) * (da_max - da_min) + da_min
+        z_mean = da_age * da_norm + proj_other_mean
+        z_mean_age_list.append(z_mean)
+    z_mean_list = np.concatenate(z_mean_age_list, 0)
+    recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
+    recons = recons.view(len(label_class), -1, 64, 64, 64).detach().cpu().numpy()
+    np.save(path, recons)
+
 def compute_average_brain_one_disease(path, model, da, dd, z_list, label_list, age_list, age_thres=[60,85], age_interval=5):
     idx_list = np.logical_and(age_list>age_thres[0], age_list<age_thres[1])
     z_list = z_list[idx_list]

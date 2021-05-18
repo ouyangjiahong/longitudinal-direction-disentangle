@@ -251,25 +251,27 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             else:
                 loss_recon = torch.tensor(0.)
 
-            if config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0:
-                loss_dir_a, loss_dir_d, loss_kl, loss_penalty = model.compute_direction_loss(zs, label, interval)
-                if config['lambda_dir_a'] > 0:
-                    loss += config['lambda_dir_a'] * loss_dir_a
-                if config['lambda_dir_d'] > 0:
-                    loss += config['lambda_dir_d'] * loss_dir_d
-                if config['lambda_kl'] > 0:
-                    loss += config['lambda_kl'] * loss_kl
-                if config['lambda_penalty'] > 0:
-                    loss += config['lambda_penalty'] * loss_penalty
-            else:
-                loss_dir_a = torch.tensor(0.)
+            if config['model_name'] == 'LSSL':
+                loss_dir_a = model.compute_direction_loss(zs)
                 loss_dir_d = torch.tensor(0.)
                 loss_kl = torch.tensor(0.)
                 loss_penalty = torch.tensor(0.)
-            # loss_dir_a = torch.tensor(0.)
-            # loss_dir_d = torch.tensor(0.)
-            # loss_kl = torch.tensor(0.)
-            # loss_penalty = torch.tensor(0.)
+            else:
+                if config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0:
+                    loss_dir_a, loss_dir_d, loss_kl, loss_penalty = model.compute_direction_loss(zs, label, interval)
+                    if config['lambda_dir_a'] > 0:
+                        loss += config['lambda_dir_a'] * loss_dir_a
+                    if config['lambda_dir_d'] > 0:
+                        loss += config['lambda_dir_d'] * loss_dir_d
+                    if config['lambda_kl'] > 0:
+                        loss += config['lambda_kl'] * loss_kl
+                    if config['lambda_penalty'] > 0:
+                        loss += config['lambda_penalty'] * loss_penalty
+                else:
+                    loss_dir_a = torch.tensor(0.)
+                    loss_dir_d = torch.tensor(0.)
+                    loss_kl = torch.tensor(0.)
+                    loss_penalty = torch.tensor(0.)
 
             loss_all_dict['all'] += loss.item()
             loss_all_dict['recon'] += loss_recon.item()
@@ -333,7 +335,10 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             elif config['dataset_name'] == 'LAB':
                 age_thres = [30, 80]
                 age_interval = 10
-            if config['model_name'] == 'LDD':
+            if config['model_name'] == 'LSSL':
+                compute_average_brain_no_disease(path, model, da.detach().cpu().numpy(),
+                                        z1_list, age_list, age_thres=age_thres, age_interval=age_interval)
+            elif config['model_name'] == 'LDD':
                 compute_average_brain_one_disease(path, model, da.detach().cpu().numpy(), dd.detach().cpu().numpy(),
                                         z1_list, label_list, age_list, age_thres=age_thres, age_interval=age_interval)
             elif config['model_name'] == 'LDDM':

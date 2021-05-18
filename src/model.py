@@ -563,22 +563,34 @@ class LDDM(nn.Module):
         bs = z1.shape[0]
         delta_z = (z2 - z1) / interval.unsqueeze(1)
 
+        # nc
         labels_nc = torch.zeros_like(labels).type(torch.FloatTensor).to(self.gpu)
         for i in range(len(self.label_list[0])):
             labels_nc += labels==self.label_list[0][i]
         labels_nc = labels_nc > 0
-        labels_dis1 = torch.zeros_like(labels).type(torch.FloatTensor).to(self.gpu)
-        for i in range(len(self.label_list[1])):
-            labels_dis1 += labels==self.label_list[1][i]
+        # disease 1 only
+        labels_dis1 = torch.zeros_like(labels).type(torch.FloatTensor).to(self.gpu) # subjects only have disease 1
+        label_list_dis1_only = np.setdiff1d(self.label_list[1], self.label_list[2])
+        for i in label_list_dis1_only:
+            labels_dis1 += labels==i
         labels_dis1 = labels_dis1 > 0
+        # disease 2 only
+        label_list_dis2_only = np.setdiff1d(self.label_list[2], self.label_list[1])
         labels_dis2 = torch.zeros_like(labels).type(torch.FloatTensor).to(self.gpu)
-        for i in range(len(self.label_list[2])):
-            labels_dis2 += labels==self.label_list[2][i]
+        for i in label_list_dis2_only:
+            labels_dis2 += labels==i
         labels_dis2 = labels_dis2 > 0
+        # disease 1 & 2
+        label_list_dis12 = np.intersect1d(self.label_list[1], self.label_list[2])
+        labels_dis12 = torch.zeros_like(labels).type(torch.FloatTensor).to(self.gpu)
+        for i in label_list_dis12:
+            labels_dis12 += labels==i
+        labels_dis12 = labels_dis12 > 0
 
         num_nc = labels_nc.sum() + 1e-12
         num_dis1 = labels_dis1.sum() + 1e-12
         num_dis2 = labels_dis2.sum() + 1e-12
+        num_dis12 = labels_dis12.sum() + 1e-12
 
         # define directions
         # aging direction
@@ -588,6 +600,7 @@ class LDDM(nn.Module):
         cos_da = torch.sum(delta_z * da_vec, 1) / (delta_z_norm * da_vec_norm)
         loss_da = (1 - cos_da) * labels_nc
         loss_da = loss_da.sum() / num_nc
+
         # component on aging direction
         delta_z_da_proj = torch.sum(delta_z * da_vec, 1) / da_vec_norm
         delta_z_da = delta_z_da_proj.unsqueeze(1) * da_vec / da_vec_norm.unsqueeze(1)
@@ -603,10 +616,6 @@ class LDDM(nn.Module):
             pdb.set_trace()
         dd1_vec_norm = torch.norm(dd1_vec, dim=1) + 1e-12
 
-        cos_dd1 = torch.sum(delta_z_dd * dd1_vec, 1) / (delta_z_dd_norm * dd1_vec_norm)
-        loss_dd1 = (1 - cos_dd1) * labels_dis1
-        loss_dd1 = loss_dd1.sum() / num_dis1
-
         # disease direction 2
         dd2_vec_front = self.disease_direction2(torch.ones(bs, 1).to(self.gpu))   # (1023,)
         dd2_vec_last = - torch.sum(da_vec[:,:-1] * dd2_vec_front, 1) / (da_vec[:,-1] + 1e-12)
@@ -615,16 +624,62 @@ class LDDM(nn.Module):
             pdb.set_trace()
         dd2_vec_norm = torch.norm(dd2_vec, dim=1) + 1e-12
 
+        # disease direction loss
+        cos_dd1 = torch.sum(delta_z_dd * dd1_vec, 1) / (delta_z_dd_norm * dd1_vec_norm)
         cos_dd2 = torch.sum(delta_z_dd * dd2_vec, 1) / (delta_z_dd_norm * dd2_vec_norm)
-        loss_dd2 = (1 - cos_dd2) * labels_dis2
-        loss_dd2 = loss_dd2.sum() / num_dis2
-        loss_dd = loss_dd1 + loss_dd2
+
+        mode_cosdd = 0
+        if mode_cosdd == 1:       # HE compute separately
+            loss_dd1 = (1 - cos_dd1) * labels_dis1
+            loss_dd1 = loss_dd1.sum() / num_dis1
+
+            loss_dd2 = (1 - cos_dd2) * labels_dis2
+            loss_dd2 = loss_dd2.sum() / num_dis2
+
+            # TODO, for group HE, compute
+            # loss on d2
+            delta_z_dd1_proj = torch.sum(delta_z_dd * dd1_vec, 1) / dd1_vec_norm
+            delta_z_dd1 = delta_z_dd1_proj.unsqueeze(1) * dd1_vec / dd1_vec_norm.unsqueeze(1)
+            delta_z_dd2_res = delta_z_dd - delta_z_dd1
+            delta_z_dd2_res_norm = torch.norm(delta_z_dd2_res, dim=1) + 1e-12
+            cos_dd2_12 = torch.sum(delta_z_dd2_res * dd2_vec, 1) / (delta_z_dd2_res_norm * dd2_vec_norm)
+            loss_dd2_12 = (1 - cos_dd2_12) * labels_dis12
+            loss_dd2_12 = loss_dd2_12.sum() / num_dis12
+            # loss on d1
+            delta_z_dd2_proj = torch.sum(delta_z_dd * dd2_vec, 1) / dd2_vec_norm
+            delta_z_dd2 = delta_z_dd2_proj.unsqueeze(1) * dd2_vec / dd2_vec_norm.unsqueeze(1)
+            delta_z_dd1_res = delta_z_dd - delta_z_dd2
+            delta_z_dd1_res_norm = torch.norm(delta_z_dd1_res, dim=1) + 1e-12
+            cos_dd1_12 = torch.sum(delta_z_dd1_res * dd1_vec, 1) / (delta_z_dd1_res_norm * dd1_vec_norm)
+            loss_dd1_12 = (1 - cos_dd1_12) * labels_dis12
+            loss_dd1_12 = loss_dd1_12.sum() / num_dis12
+
+            loss_dd = loss_dd1 + loss_dd2 + 0.5*(loss_dd1_12+loss_dd2_12)
+        elif mode_cosdd == 2:        # HE together with H/E
+            loss_dd1 = (1 - cos_dd1) * (labels_dis1 + labels_dis12)
+            loss_dd1 = loss_dd1.sum() / (num_dis1 + num_dis12)
+
+            loss_dd2 = (1 - cos_dd2) * (labels_dis2 + labels_dis12)
+            loss_dd2 = loss_dd2.sum() / (num_dis2 + num_dis12)
+            loss_dd = loss_dd1 + loss_dd2
+        else:       # do not regularize HE
+            loss_dd1 = (1 - cos_dd1) * labels_dis1
+            loss_dd1 = loss_dd1.sum() / num_dis1
+
+            loss_dd2 = (1 - cos_dd2) * labels_dis2
+            loss_dd2 = loss_dd2.sum() / num_dis2
+            loss_dd = loss_dd1 + loss_dd2
 
 
         # kl loss
         nc_idx = torch.where(labels_nc == 1)[0]
-        dis1_idx = torch.where(labels_dis1 == 1)[0]
-        dis2_idx = torch.where(labels_dis2 == 1)[0]
+        mode_kl = 1
+        if mode_kl == 1:        # do not include HE
+            dis1_idx = torch.where(labels_dis1)[0]
+            dis2_idx = torch.where(labels_dis2)[0]
+        else:
+            dis1_idx = torch.where(labels_dis1 | labels_dis12)[0]
+            dis2_idx = torch.where(labels_dis2 | labels_dis12)[0]
         try:
             delta_z_da_proj_nc = torch.index_select(delta_z_da_proj, 0, nc_idx)
             delta_z_da_proj_dis1 = torch.index_select(delta_z_da_proj, 0, dis1_idx)
@@ -648,8 +703,15 @@ class LDDM(nn.Module):
         # penalty loss for NC projection on disease direction
         penalty_loss = torch.tensor(0., device=self.gpu)
         delta_z_dd1_proj = torch.sum(delta_z * dd1_vec, 1) / dd1_vec_norm
-        delta_z_dd1_proj_nc = torch.index_select(delta_z_dd1_proj, 0, nc_idx)
         delta_z_dd1_proj_dis = torch.index_select(delta_z_dd1_proj, 0, dis1_idx)
+
+        mode_penalty = True
+        if mode_penalty:   # penalty of C/H on dd1
+            dis_not1_idx = torch.where(labels_nc | labels_dis2)[0]
+            delta_z_dd1_proj_nc = torch.index_select(delta_z_dd1_proj, 0, dis_not1_idx)
+        else:      # penalty of C on dd1
+            delta_z_dd1_proj_nc = torch.index_select(delta_z_dd1_proj, 0, nc_idx)
+
         try:
             # penalty_loss = torch.mean(torch.abs(delta_z_dd_proj_nc / (delta_z_da_proj_nc+1e-12)))
             penalty_loss += torch.mean(torch.abs(delta_z_dd1_proj_nc)) / (torch.mean(torch.abs(delta_z_dd1_proj_dis))+1e-12)
@@ -657,13 +719,21 @@ class LDDM(nn.Module):
             penalty_loss += torch.tensor(0., device=self.gpu)
 
         delta_z_dd2_proj = torch.sum(delta_z * dd2_vec, 1) / dd1_vec_norm
-        delta_z_dd2_proj_nc = torch.index_select(delta_z_dd2_proj, 0, nc_idx)
+
         delta_z_dd2_proj_dis = torch.index_select(delta_z_dd2_proj, 0, dis2_idx)
+        if mode_penalty:   # penalty of C/E on dd2
+            dis_not2_idx = torch.where(labels_nc | labels_dis1)[0]
+            delta_z_dd2_proj_nc = torch.index_select(delta_z_dd2_proj, 0, dis_not2_idx)
+        else:      # penalty of C on dd1
+            delta_z_dd2_proj_nc = torch.index_select(delta_z_dd2_proj, 0, nc_idx)
+
         try:
             # penalty_loss = torch.mean(torch.abs(delta_z_dd_proj_nc / (delta_z_da_proj_nc+1e-12)))
             penalty_loss = +torch.mean(torch.abs(delta_z_dd2_proj_nc)) / (torch.mean(torch.abs(delta_z_dd2_proj_dis))+1e-12)
         except:
             penalty_loss += torch.tensor(0., device=self.gpu)
+
+
 
         return loss_da, loss_dd, kl_loss, penalty_loss
 
