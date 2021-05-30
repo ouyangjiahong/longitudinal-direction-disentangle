@@ -68,6 +68,7 @@ class LongitudinalPairDataset(Dataset):
         self.subj_id_list = subj_id_list
         self.case_id_list = case_id_list
         self.aug = aug
+        self.dataset_name = dataset_name
 
     def __len__(self):
         return len(self.subj_id_list)
@@ -83,6 +84,18 @@ class LongitudinalPairDataset(Dataset):
         interval = np.array(self.data_noimg[subj_id]['date_interval'][case_order_2] - self.data_noimg[subj_id]['date_interval'][case_order_1])
         age = np.array(self.data_noimg[subj_id]['age'] + self.data_noimg[subj_id]['date_interval'][case_order_1])
         # print(subj_id, case_order_1, case_order_2, label_all, interval)
+        try:
+            sex = np.array(self.data_noimg[subj_id]['sex'])
+        except:
+            sex = 0
+
+        if self.dataset_name == 'ADNI':
+            score = np.array(self.data_noimg[subj_id]['adas'][[case_order_1, case_order_2]])
+        elif self.dataset_name == 'LAB':
+            score = np.concatenate([self.data_noimg[subj_id]['alcohol'][[case_order_1, case_order_2]],
+                                    self.data_noimg[subj_id]['hiv'][[case_order_1, case_order_2]]])
+        else:
+            score = 0
 
         if self.aug:
             rand_idx = np.random.randint(0, 10)
@@ -91,7 +104,7 @@ class LongitudinalPairDataset(Dataset):
         img1 = np.array(self.data_img[subj_id][case_id_1][rand_idx])
         img2 = np.array(self.data_img[subj_id][case_id_2][rand_idx])
 
-        return {'img1': img1, 'img2': img2, 'label': label, 'interval': interval, 'age': age}
+        return {'img1': img1, 'img2': img2, 'label': label, 'interval': interval, 'age': age, 'sex': sex, 'score': score}
 
 class LongitudinalPairDatasetMix(Dataset):
     def __init__(self, dataset_name, data_img_list, data_noimg_list, subj_id_list, case_id_list, dataset_idx_list, aug=False):
@@ -101,6 +114,7 @@ class LongitudinalPairDatasetMix(Dataset):
         self.case_id_list = case_id_list
         self.dataset_idx_list = dataset_idx_list
         self.aug = aug
+        self.dataset_name = dataset_name
 
     def __len__(self):
         return len(self.subj_id_list)
@@ -120,6 +134,23 @@ class LongitudinalPairDatasetMix(Dataset):
         interval = np.array(self.data_noimg_list[dataset_idx][subj_id]['date_interval'][case_order_2] - self.data_noimg_list[dataset_idx][subj_id]['date_interval'][case_order_1])
         age = np.array(self.data_noimg_list[dataset_idx][subj_id]['age'] + self.data_noimg_list[dataset_idx][subj_id]['date_interval'][case_order_1])
         # print(subj_id, case_order_1, case_order_2, label_all, interval)
+        try:
+            sex = np.array(self.data_noimg_list[dataset_idx][subj_id]['sex'])
+        except:
+            sex = 0
+
+        if self.dataset_name == 'ADNI':
+            score = np.array(self.data_noimg_list[dataset_idx][subj_id]['adas'][[case_order_1, case_order_2]])
+        elif self.dataset_name == 'LAB':
+            score = np.concatenate([self.data_noimg_list[dataset_idx][subj_id]['alcohol'][[case_order_1, case_order_2]],
+                                    self.data_noimg_list[dataset_idx][subj_id]['hiv'][[case_order_1, case_order_2]]])
+        elif self.dataset_name == 'ADNI_LAB':
+            if dataset_idx == 0:
+                score = np.concatenate([self.data_noimg_list[dataset_idx][subj_id]['adas'][[case_order_1, case_order_2]],[0,0]])
+            else:
+                score = np.concatenate([[0,0], self.data_noimg_list[dataset_idx][subj_id]['hiv'][[case_order_1, case_order_2]]])
+        else:
+            score = 0
 
         if self.aug:
             rand_idx = np.random.randint(0, 10)
@@ -128,7 +159,7 @@ class LongitudinalPairDatasetMix(Dataset):
         img1 = np.array(self.data_img_list[dataset_idx][subj_id][case_id_1][rand_idx])
         img2 = np.array(self.data_img_list[dataset_idx][subj_id][case_id_2][rand_idx])
 
-        return {'img1': img1, 'img2': img2, 'label': label, 'interval': interval, 'age': age}
+        return {'img1': img1, 'img2': img2, 'label': label, 'interval': interval, 'age': age, 'sex': sex, 'score': score}
 
 class LongitudinalData(object):
     def __init__(self, dataset_name, data_path, img_file_name='ADNI_longitudinal_img.h5',

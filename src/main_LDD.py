@@ -62,15 +62,15 @@ testDataLoader = Data.testLoader
 
 # define model
 if config['model_name'] == 'LDD':
-    model = LDD(gpu=config['device'], model=config['enc_dec_type']).to(config['device'])
+    model = LDD(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] == 'LDDM':
-    model = LDDM(label_list=config['label_list'], gpu=config['device'], model=config['enc_dec_type']).to(config['device'])
+    model = LDDM(label_list=config['label_list'], gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] == 'AE':
     model = AE().to(config['device'])
 elif config['model_name'] == 'VAE':
     model = VAE().to(config['device'])
 elif config['model_name'] == 'LSSL':
-    model = LSSL(gpu=config['device'], model=config['enc_dec_type']).to(config['device'])
+    model = LSSL(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] in ['LSP']:
     model = LSP(gpu=config['device']).to(config['device'])
 else:
@@ -242,6 +242,8 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
     z2_list = []
     interval_list = []
     age_list = []
+    sex_list = []
+    score_list = []
 
     with torch.no_grad():
         for iter, sample in tqdm.tqdm(enumerate(loader, 0)):
@@ -301,6 +303,8 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
                 interval_list.append(interval.detach().cpu().numpy())
                 age_list.append(sample['age'].numpy())
                 label_list.append(label.detach().cpu().numpy())
+                sex_list.append(sample['sex'].numpy())
+                score_list.append(sample['score'].numpy())
 
             # if iter > 2:
             #     break
@@ -319,6 +323,8 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             interval_list = np.concatenate(interval_list, axis=0)
             age_list = np.concatenate(age_list, axis=0)
             label_list = np.concatenate(label_list, axis=0)
+            sex_list = np.concatenate(sex_list, axis=0)
+            score_list = np.concatenate(score_list, axis=0)
             if config['model_name'] == 'LSSL':
                 da = model.compute_directions()
                 dd = da
@@ -334,6 +340,8 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             h5_file.create_dataset('z2', data=z2_list)
             h5_file.create_dataset('interval', data=interval_list)
             h5_file.create_dataset('age', data=age_list)
+            h5_file.create_dataset('sex', data=sex_list)
+            h5_file.create_dataset('score', data=score_list)
             h5_file.create_dataset('da', data=da.detach().cpu().numpy())
             h5_file.create_dataset('dd', data=dd.detach().cpu().numpy())
 
@@ -344,6 +352,9 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
                 age_interval = 5
             elif config['dataset_name'] == 'LAB':
                 age_thres = [30, 80]
+                age_interval = 10
+            elif config['dataset_name'] == 'ADNI_LAB':
+                age_thres = [20, 90]
                 age_interval = 10
             if config['model_name'] == 'LSSL':
                 compute_average_brain_no_disease(path, model, da.detach().cpu().numpy(),
