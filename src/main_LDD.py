@@ -109,7 +109,7 @@ def train():
 
     for epoch in range(start_epoch+1, config['epochs']):
         model.train()
-        loss_all_dict = {'all': 0, 'recon': 0., 'dir_a': 0., 'dir_d': 0., 'kl': 0., 'penalty': 0.}
+        loss_all_dict = {'all': 0, 'recon': 0., 'dir_a': 0., 'dir_d': 0., 'kl': 0., 'penalty': 0., 'reg': 0.}
         global_iter0 = global_iter
         for iter, sample in enumerate(trainDataLoader, 0):
             global_iter += 1
@@ -155,12 +155,21 @@ def train():
                 loss_kl = torch.tensor(0.)
                 loss_penalty = torch.tensor(0.)
 
+            if config['lambda_reg'] > 0 and config['is_mapping']:
+                loss_reg = torch.tensor(0., device=config['device'])
+                for param in model.mapping.parameters():
+                    loss_reg += torch.norm(param)
+                loss += config['lambda_reg'] * loss_reg
+            else:
+                loss_reg = torch.tensor(0.)
+
             loss_all_dict['all'] += loss.item()
             loss_all_dict['recon'] += loss_recon.item()
             loss_all_dict['dir_a'] += loss_dir_a.item()
             loss_all_dict['dir_d'] += loss_dir_d.item()
             loss_all_dict['kl'] += loss_kl.item()
             loss_all_dict['penalty'] += loss_penalty.item()
+            loss_all_dict['reg'] += loss_reg.item()
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -175,8 +184,8 @@ def train():
             optimizer.zero_grad()
 
             if global_iter % 1 == 0:
-                print('Epoch[%3d], iter[%3d]: loss=[%.4f], recon=[%.4f], dir_a=[%.4f], dir_d=[%.4f], kl=[%.4f], penalty=[%.4f]' \
-                        % (epoch, iter, loss.item(), loss_recon.item(), loss_dir_a.item(), loss_dir_d.item(), loss_kl.item(), loss_penalty.item()))
+                print('Epoch[%3d], iter[%3d]: loss=[%.4f], recon=[%.4f], dir_a=[%.4f], dir_d=[%.4f], kl=[%.4f], penalty=[%.4f], reg=[%.4f]' \
+                        % (epoch, iter, loss.item(), loss_recon.item(), loss_dir_a.item(), loss_dir_d.item(), loss_kl.item(), loss_penalty.item(), loss_reg.item()))
 
             # if iter > 2:
             #     break
