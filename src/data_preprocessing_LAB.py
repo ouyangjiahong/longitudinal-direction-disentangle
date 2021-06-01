@@ -19,6 +19,14 @@ csv_path = '/data/jiahong/data/LAB/demographics_lab_full.csv'      # label for s
 data_path = '/data/jiahong/data/LAB/img_64_longitudinal/'
 df_raw = pd.read_csv(csv_path, usecols=['subject', 'demo_diag', 'demo_dob', 'demo_sex'])
 
+csv_E_path = '/data/jiahong/data/LAB/alcohol_hx.csv'
+df_E = pd.read_csv(csv_E_path, usecols=['subject', 'alc_hx_date', 'alc_hx_avg_drinks_month'])
+csv_E_path2 = '/data/jiahong/data/LAB/calculations.csv'
+df_E2 = pd.read_csv(csv_E_path2, usecols=['subject', 'visit', 'alc_hx_tot_alc_past_year', 'alc_hx_tot_alc_kg'])
+csv_H_path = '/data/jiahong/data/LAB/hiv_aids.csv'
+df_H = pd.read_csv(csv_H_path, usecols=['subject', 'hiv_aid_conditions_date', 'hiv_aid_cd4_nadir', 'hiv_aid_karnofsky_score'])
+
+
 
 # load label, age, image paths
 '''
@@ -56,12 +64,67 @@ for img_path in img_paths:
             if dob == 'NaT':
                 pdb.set_trace()
             age = (date_struct - datetime.strptime(dob, '%Y-%m-%d')).days / 365.
-            subj_data[subj_id] = {'age': age, 'label': label_dict[rows.iloc[0]['demo_diag']], 'date': [], 'date_start': date_struct, 'date_interval': [], 'img_paths': []}
+            subj_data[subj_id] = {'age': age, 'label': label_dict[rows.iloc[0]['demo_diag']], 'date': [], 'date_start': date_struct, 'date_interval': [], 'img_paths': [], 'alcohol':[], 'hiv':[]}
+            subj_data[subj_id]['sex'] = 1 if rows.iloc[0]['demo_sex'] == 'M' else 0
 
         subj_data[subj_id]['date'].append(date)
         subj_data[subj_id]['date_interval'].append((date_struct - subj_data[subj_id]['date_start']).days / 365.)
         subj_data[subj_id]['img_paths'].append(os.path.basename(img_path))
 
+        # match alcohol label
+        alcohol_score = []
+        rows_E = df_E.loc[(df_E['subject'] == subj_id)]
+        idx_match_list = []
+        for i in range(rows_E.shape[0]):
+            if rows_E.iloc[i]['alc_hx_date'] == 'NaT':
+                continue
+            date_struct_now_E = datetime.strptime(rows_E.iloc[i]['alc_hx_date'], '%Y-%m-%d')
+            if abs((date_struct_now_E - date_struct).days) < 120:
+                idx_match_list.append(i)
+        if len(idx_match_list) == 0:
+            print('Missing E label for', subj_id, date_struct)
+            alcohol_score.append(np.nan)
+        else:
+            alcohol_score.append(np.nanmean(rows_E.iloc[idx_match_list]['alc_hx_avg_drinks_month']))
+
+        rows_E = df_E2.loc[(df_E2['subject'] == subj_id)]
+        idx_match_list = []
+        for i in range(rows_E.shape[0]):
+            if rows_E.iloc[i]['visit'] == 'NaT':
+                continue
+            date_struct_now_E = datetime.strptime(rows_E.iloc[i]['visit'].split('_')[0], '%Y%m%d')
+            if abs((date_struct_now_E - date_struct).days) < 120:
+                idx_match_list.append(i)
+        if len(idx_match_list) == 0:
+            print('Missing E label for', subj_id, date_struct)
+            alcohol_score.append(np.nan)
+            alcohol_score.append(np.nan)
+        else:
+            alcohol_score.append(np.nanmean(rows_E.iloc[idx_match_list]['alc_hx_tot_alc_past_year']))
+            alcohol_score.append(np.nanmean(rows_E.iloc[idx_match_list]['alc_hx_tot_alc_kg']))
+
+        subj_data[subj_id]['alcohol'].append(alcohol_score)
+
+        # match hiv label
+        hiv_score = []
+        rows_H = df_H.loc[(df_H['subject'] == subj_id)]
+        idx_match_list = []
+        for i in range(rows_H.shape[0]):
+            if rows_H.iloc[i]['hiv_aid_conditions_date'] == 'NaT':
+                continue
+            date_struct_now_H = datetime.strptime(rows_H.iloc[i]['hiv_aid_conditions_date'], '%Y-%m-%d')
+            if abs((date_struct_now_H - date_struct).days) < 120:
+                idx_match_list.append(i)
+        if len(idx_match_list) == 0:
+            print('Missing H label for', subj_id, date_struct)
+            hiv_score.append(np.nan)
+            hiv_score.append(np.nan)
+        else:
+            hiv_score.append(np.nanmean(rows_H.iloc[idx_match_list]['hiv_aid_cd4_nadir']))
+            hiv_score.append(np.nanmean(rows_H.iloc[idx_match_list]['hiv_aid_karnofsky_score']))
+        subj_data[subj_id]['hiv'].append(hiv_score)
+
+pdb.set_trace()
 
 # get sMCI, pMCI labels
 num_ts_c = 0
@@ -123,8 +186,8 @@ for i in range(counts.shape[1]-2, 0, -1):
 print(counts_cum)
 
 # save subj_data to h5
-pdb.set_trace()
-h5_noimg_path = '/data/jiahong/data/LAB/LAB_longitudinal_noimg.h5'
+# pdb.set_trace()
+h5_noimg_path = '/data/jiahong/data/LAB/LAB_longitudinal_noimg_0601.h5'
 if not os.path.exists(h5_noimg_path):
     f_noimg = h5py.File(h5_noimg_path, 'a')
     for i, subj_id in enumerate(subj_data.keys()):
@@ -134,8 +197,12 @@ if not os.path.exists(h5_noimg_path):
         # subj_noimg.create_dataset('date_start', data=subj_data[subj_id]['date_start'])
         subj_noimg.create_dataset('date_interval', data=subj_data[subj_id]['date_interval'])
         subj_noimg.create_dataset('age', data=subj_data[subj_id]['age'])
+        subj_noimg.create_dataset('sex', data=subj_data[subj_id]['sex'])
+        subj_noimg.create_dataset('hiv', data=subj_data[subj_id]['hiv'])
+        subj_noimg.create_dataset('alcohol', data=subj_data[subj_id]['alcohol'])
         # subj_noimg.create_dataset('img_paths', data=subj_data[subj_id]['img_paths'])
 
+pdb.set_trace()
 # save images to h5
 # pdb.set_trace()
 # h5_img_path = '/data/jiahong/data/LAB/LAB_longitudinal_img.h5'
@@ -252,7 +319,7 @@ for fold in range(5):
     subj_test_list = []
     subj_val_list = []
     subj_train_list = []
-    
+
     for class_name in ['C', 'H', 'HE']:
     # for class_name in ['C']:
         class_list = subj_id_all[class_name]

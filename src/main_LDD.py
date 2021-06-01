@@ -62,15 +62,15 @@ testDataLoader = Data.testLoader
 
 # define model
 if config['model_name'] == 'LDD':
-    model = LDD(gpu=config['device'], model=config['enc_dec_type'], latent_size=config['latent_size']).to(config['device'])
+    model = LDD(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] == 'LDDM':
-    model = LDDM(label_list=config['label_list'], gpu=config['device'], model=config['enc_dec_type'], latent_size=config['latent_size']).to(config['device'])
+    model = LDDM(label_list=config['label_list'], gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] == 'AE':
     model = AE().to(config['device'])
 elif config['model_name'] == 'VAE':
     model = VAE().to(config['device'])
 elif config['model_name'] == 'LSSL':
-    model = LSSL(gpu=config['device'], model=config['enc_dec_type'], latent_size=config['latent_size']).to(config['device'])
+    model = LSSL(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] in ['LSP']:
     model = LSP(gpu=config['device']).to(config['device'])
 else:
@@ -155,14 +155,12 @@ def train():
                 loss_kl = torch.tensor(0.)
                 loss_penalty = torch.tensor(0.)
 
-            if config['lambda_reg'] > 0:
+            if config['lambda_reg'] > 0 and config['is_mapping']:
                 loss_reg = torch.tensor(0., device=config['device'])
-                if 'mapping' in model.encoder.__dict__['_modules']:
-                    for param in model.encoder.mapping.parameters():
-                        loss_reg += torch.norm(param)
-                if 'mapping' in model.decoder.__dict__['_modules']:
-                    for param in model.decoder.mapping.parameters():
-                        loss_reg += torch.norm(param)
+                for param in model.mapping_enc.parameters():
+                    loss_reg += torch.norm(param)
+                for param in model.mapping_dec.parameters():
+                    loss_reg += torch.norm(param)
                 loss += config['lambda_reg'] * loss_reg
             else:
                 loss_reg = torch.tensor(0.)
