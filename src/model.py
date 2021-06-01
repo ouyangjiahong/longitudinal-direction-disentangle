@@ -186,6 +186,37 @@ class Encoder_Simple(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+class Encoder_Simple_Mapping(nn.Module):
+    def __init__(self, inter_num_ch=16, latent_size=512):
+        super(Encoder_Simple_Mapping, self).__init__()
+        self.conv = nn.Sequential(
+                        nn.Conv3d(1, inter_num_ch, kernel_size=3, padding=1),
+                        # nn.ReLU(inplace=True),
+                        nn.LeakyReLU(0.2, inplace=True),
+                        nn.MaxPool3d(2),
+                        nn.Conv3d(inter_num_ch, 2*inter_num_ch, kernel_size=3, padding=1),
+                        # nn.ReLU(inplace=True),
+                        nn.LeakyReLU(0.2, inplace=True),
+                        nn.MaxPool3d(2),
+                        nn.Conv3d(2*inter_num_ch, 4*inter_num_ch, kernel_size=3, padding=1),
+                        # nn.ReLU(inplace=True),
+                        nn.LeakyReLU(0.2, inplace=True),
+                        nn.MaxPool3d(2),
+                        nn.Conv3d(4*inter_num_ch, inter_num_ch, kernel_size=3, padding=1),
+                        # nn.ReLU(inplace=True),
+                        nn.LeakyReLU(0.2, inplace=True),
+                        nn.MaxPool3d(2))
+
+        self.mapping = nn.Sequential(
+                            nn.Linear(1024, latent_size),
+                            nn.Tanh())
+
+    def forward(self, x):
+        z = self.conv(x)
+        z_flatten = z.view(x.shape[0], -1)
+        z_flatten_map = self.mapping(z_flatten)
+        return z_flatten_map
+
 class Decoder(nn.Module):
     def __init__(self, out_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
         super(Decoder, self).__init__()
@@ -229,6 +260,38 @@ class Decoder_Simple(nn.Module):
 
     def forward(self, x):
         x_reshaped = x.view(x.shape[0], 16, 4, 4, 4)
+        return self.conv(x_reshaped)
+        # return self.conv(x)
+
+class Decoder_Simple_Mapping(nn.Module):
+    def __init__(self, inter_num_ch=16, latent_size=512):
+        super(Decoder_Simple_Mapping, self).__init__()
+        self.mapping = nn.Sequential(
+                            nn.Linear(latent_size, 1024),
+                            nn.Tanh())
+
+        self.conv = nn.Sequential(
+                        nn.Conv3d(inter_num_ch, inter_num_ch, kernel_size=3, padding=1),
+                        # nn.ReLU(inplace=True),
+                        nn.LeakyReLU(0.2, inplace=True),
+                        nn.Upsample(scale_factor=(2,2,2), mode='trilinear', align_corners=True),
+                        nn.Conv3d(inter_num_ch, 4*inter_num_ch, kernel_size=3, padding=1),
+                        # nn.ReLU(inplace=True),
+                        nn.LeakyReLU(0.2, inplace=True),
+                        nn.Upsample(scale_factor=(2,2,2), mode='trilinear', align_corners=True),
+                        nn.Conv3d(4*inter_num_ch, 2*inter_num_ch, kernel_size=3, padding=1),
+                        # nn.ReLU(inplace=True),
+                        nn.LeakyReLU(0.2, inplace=True),
+                        nn.Upsample(scale_factor=(2,2,2), mode='trilinear', align_corners=True),
+                        nn.Conv3d(2*inter_num_ch, inter_num_ch, kernel_size=3, padding=1),
+                        # nn.ReLU(inplace=True),
+                        nn.LeakyReLU(0.2, inplace=True),
+                        nn.Upsample(scale_factor=(2,2,2), mode='trilinear', align_corners=True),
+                        nn.Conv3d(inter_num_ch, 1, kernel_size=3, padding=1))
+
+    def forward(self, x):
+        x_map = self.mapping(x)
+        x_reshaped = x_map.view(x.shape[0], 16, 4, 4, 4)
         return self.conv(x_reshaped)
         # return self.conv(x)
 
@@ -355,7 +418,7 @@ class VAE(nn.Module):
         return torch.mean(torch.sum(kl, dim=-1))
 
 class LSSL(nn.Module):
-    def __init__(self, gpu='None', model='normal', is_mapping=False, latent_size=512):
+    def __init__(self, gpu='None', model='normal', latent_size=512):
         super(LSSL, self).__init__()
         if model == 'normal':
             self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
@@ -363,15 +426,11 @@ class LSSL(nn.Module):
         elif model == 'simple':
             self.encoder = Encoder_Simple()
             self.decoder = Decoder_Simple()
+        elif model == 'simple-mapping':
+            self.encoder = Encoder_Simple_Mapping(latent_size=latent_size)
+            self.decoder = Decoder_Simple_Mapping(latent_size=latent_size)
         else:
             raise ValueError('Do not support other encoder-decoder model!')
-        if is_mapping:
-            self.mapping = nn.Sequential(
-                                        nn.Linear(1024, latent_size),
-                                        nn.Tanh())
-        else:
-            latent_size = 1024
-        self.is_mapping = is_mapping
         self.direction = nn.Linear(1, latent_size)
         self.gpu = gpu
 
@@ -380,8 +439,6 @@ class LSSL(nn.Module):
         zs = self.encoder(torch.cat([img1, img2], 0))
         recons = self.decoder(zs)
         zs_flatten = zs.view(bs*2, -1)
-        if self.is_mapping:
-            zs_flatten = self.mapping(zs_flatten)
         z1, z2 = zs_flatten[:bs], zs_flatten[bs:]
         recon1, recon2 = recons[:bs], recons[bs:]
         return [z1, z2], [recon1, recon2]
@@ -502,7 +559,7 @@ class LSP(nn.Module):
 
 
 class LDD(nn.Module):
-    def __init__(self, gpu='None', model='normal', is_mapping=False, latent_size=512):
+    def __init__(self, gpu='None', model='normal', latent_size=512):
         super(LDD, self).__init__()
         if model == 'normal':
             self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
@@ -510,15 +567,11 @@ class LDD(nn.Module):
         elif model == 'simple':
             self.encoder = Encoder_Simple()
             self.decoder = Decoder_Simple()
+        elif model == 'simple-mapping':
+            self.encoder = Encoder_Simple_Mapping(latent_size=latent_size)
+            self.decoder = Decoder_Simple_Mapping(latent_size=latent_size)
         else:
             raise ValueError('Do not support other encoder-decoder model!')
-        if is_mapping:
-            self.mapping = nn.Sequential(
-                                        nn.Linear(1024, latent_size),
-                                        nn.Tanh())
-        else:
-            latent_size = 1024
-        self.is_mapping = is_mapping
         self.aging_direction = nn.Linear(1, latent_size, bias=False)
         self.disease_direction = nn.Linear(1, latent_size-1, bias=False)
         self.gpu = gpu
@@ -528,8 +581,6 @@ class LDD(nn.Module):
         zs = self.encoder(torch.cat([img1, img2], 0))
         recons = self.decoder(zs)
         zs_flatten = zs.view(bs*2, -1)
-        if self.is_mapping:
-            zs_flatten = self.mapping(zs_flatten)
         z1, z2 = zs_flatten[:bs], zs_flatten[bs:]
         recon1, recon2 = recons[:bs], recons[bs:]
         return [z1, z2], [recon1, recon2]
@@ -614,7 +665,7 @@ class LDD(nn.Module):
 
 
 class LDDM(nn.Module):
-    def __init__(self, label_list, gpu='None', model='normal', is_mapping=False, latent_size=512):
+    def __init__(self, label_list, gpu='None', model='normal', latent_size=512):
         super(LDDM, self).__init__()
         if model == 'normal':
             self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
@@ -622,15 +673,11 @@ class LDDM(nn.Module):
         elif model == 'simple':
             self.encoder = Encoder_Simple()
             self.decoder = Decoder_Simple()
+        elif model == 'simple-mapping':
+            self.encoder = Encoder_Simple_Mapping(latent_size=latent_size)
+            self.decoder = Decoder_Simple_Mapping(latent_size=latent_size)
         else:
             raise ValueError('Do not support other encoder-decoder model!')
-        if is_mapping:
-            self.mapping = nn.Sequential(
-                                        nn.Linear(1024, latent_size),
-                                        nn.Tanh())
-        else:
-            latent_size = 1024
-        self.is_mapping = is_mapping
         self.aging_direction = nn.Linear(1, latent_size, bias=False)
         self.disease_direction1 = nn.Linear(1, latent_size-1, bias=False)
         self.disease_direction2 = nn.Linear(1, latent_size-1, bias=False)
@@ -642,8 +689,6 @@ class LDDM(nn.Module):
         zs = self.encoder(torch.cat([img1, img2], 0))
         recons = self.decoder(zs)
         zs_flatten = zs.view(bs*2, -1)
-        if self.is_mapping:
-            zs_flatten = self.mapping(zs_flatten)
         z1, z2 = zs_flatten[:bs], zs_flatten[bs:]
         recon1, recon2 = recons[:bs], recons[bs:]
         return [z1, z2], [recon1, recon2]

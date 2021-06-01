@@ -2,26 +2,26 @@
 phase: 'train'
 # phase: 'test'
 load_yaml: True
-gpu: '2'
+gpu: '1'
 
 # pretraining setting
 continue_train: False
 # continue_train: True
-ckpt_name: 'model_best.pth.tar'
-# ckpt_name: 'pretrained_model_best.pth.tar'      ###################
+# ckpt_name: 'model_best.pth.tar'
+ckpt_name: 'pretrained_model_best.pth.tar'      ###################
 # ckpt_name: 'epoch197.pth.tar'
 
 # dataset
-# data_type: 'pair'
-# dataset_name: 'ADNI'
-# data_path: '../data/ADNI/'
-# # img_file_name: 'ADNI_longitudinal_img.h5'
-# img_file_name: 'ADNI_longitudinal_img_aug.h5'
-# noimg_file_name: 'ADNI_longitudinal_noimg.h5'
-# subj_list_postfix: 'NC_AD_pMCI_sMCI'          ###################
-# # subj_list_postfix: 'NC'
-# # subj_list_postfix: 'NC_AD'
-# # subj_list_postfix: 'pMCI_sMCI'
+data_type: 'pair'
+dataset_name: 'ADNI'
+data_path: '../data/ADNI/'
+# img_file_name: 'ADNI_longitudinal_img.h5'
+img_file_name: 'ADNI_longitudinal_img_aug.h5'
+noimg_file_name: 'ADNI_longitudinal_noimg_0517.h5'
+subj_list_postfix: 'NC_AD_pMCI_sMCI'          ###################
+# subj_list_postfix: 'NC'
+# subj_list_postfix: 'NC_AD'
+# subj_list_postfix: 'pMCI_sMCI'
 
 # data_type: 'pair'
 # # data_type: 'single'
@@ -29,7 +29,7 @@ ckpt_name: 'model_best.pth.tar'
 # data_path: '../data/LAB/'
 # # img_file_name: 'LAB_longitudinal_img.h5'
 # img_file_name: 'LAB_longitudinal_img_aug.h5'
-# noimg_file_name: 'LAB_longitudinal_noimg.h5'
+# noimg_file_name: 'LAB_longitudinal_noimg_0517.h5'
 # # subj_list_postfix: 'C_E_HE_far'
 # # subj_list_postfix: 'C_E_HE'
 # subj_list_postfix: 'C_E_H_HE'
@@ -40,14 +40,14 @@ ckpt_name: 'model_best.pth.tar'
 # # label_list: [[0], [1], [2]]
 # label_list: [[0], [1,3], [2,3]]
 
-data_type: 'pair'
-dataset_name: 'ADNI_LAB'
-data_path: ['../data/ADNI/', '../data/LAB/']
-# img_file_name: 'ADNI_longitudinal_img.h5'
-img_file_name: ['ADNI_longitudinal_img_aug.h5', 'LAB_longitudinal_img_aug.h5']
-noimg_file_name: ['ADNI_longitudinal_noimg.h5', 'LAB_longitudinal_noimg.h5']
-subj_list_postfix: 'NC_AD_pMCI_sMCI_C_H_HE'
-label_list: [[0,5], [2,3,4], [7,8]]
+# data_type: 'pair'
+# dataset_name: 'ADNI_LAB'
+# data_path: ['../data/ADNI/', '../data/LAB/']
+# # img_file_name: 'ADNI_longitudinal_img.h5'
+# img_file_name: ['ADNI_longitudinal_img_aug.h5', 'LAB_longitudinal_img_aug.h5']
+# noimg_file_name: ['ADNI_longitudinal_noimg_0517.h5', 'LAB_longitudinal_noimg_0517.h5']
+# subj_list_postfix: 'NC_AD_pMCI_sMCI_C_H_HE'
+# label_list: [[0,5], [2,3,4], [7,8]]
 
 
 # training setting
@@ -70,7 +70,7 @@ froze_encoder: False
 froze_dir_a: False                  ###################
 
 # model setting
-latent_size: 1024
+latent_size: 512
 num_neighbours: 5
 agg_method: 'gaussian'
 
@@ -84,12 +84,14 @@ lambda_dir_d: 0.
 lambda_cls: 0.
 lambda_kl: 0.
 lambda_penalty: 0.      ###################
+lambda_reg: 0.1
 
 lambda_dir: 0.
 lambda_dis: 0.
 
-enc_dec_type: 'simple'
-
+# enc_dec_type: 'simple'
+# enc_dec_type: 'normal'
+enc_dec_type: 'simple-mapping'
 
 # LDD on ADNI
 # ckpt_timelabel: '2021_4_13_10_43'         # step 1: LSSL on all
@@ -104,7 +106,7 @@ enc_dec_type: 'simple'
 # ckpt_timelabel: '2021_5_3_22_12'            # step 3: LDD, based on 2021_5_3_22_11, only use ad to regularize
 
 # Simple model
-# ckpt_timelabel: '2021_5_17_21_19'         # step 1: LSSL on all, 97685
+# ckpt_timelabel: '2021_5_17_23_11'         # step 1: LSSL on all, 97685
 
 
 # LDD on LAB
@@ -116,17 +118,52 @@ enc_dec_type: 'simple'
 
 # ckpt_timelabel: '2021_5_10_16_13'         # step 2: LDDM 2021_5_10_16_10, loss: 4,2,1,0,0, on C+E+H+HE
 # ckpt_timelabel: '2021_5_10_16_14'         # step 3: LDDM 2021_5_10_16_13, loss: 4,2,1,1,1, on C+E+H+HE
-# ckpt_timelabel: '2021_5_10_16_17'         # step 2: LDDM 2021_5_10_16_13, loss: 4,2,1,1,1, on C+E+H+HE, new penalty loss
+# ckpt_timelabel: '2021_5_10_16_17'         # step 3: LDDM 2021_5_10_16_13, loss: 4,2,1,1,1, on C+E+H+HE, new penalty loss
 
 # ckpt_timelabel: '2021_5_10_16_15'         # step 2: LDDM 2021_5_10_16_9, loss: 4,2,1,0,0, on C+E+H+HE
-# ckpt_timelabel: '2021_5_10_16_16'         # step 2: LDDM 2021_5_10_16_10, loss: 4,2,1,1,1, on C+E+H+HE
+# ckpt_timelabel: '2021_5_10_16_16'         # step 3: LDDM 2021_5_10_16_10, loss: 4,2,1,1,1, on C+E+H+HE
 
 # ckpt_timelabel: '2021_5_17_16_45'         # step 2: LDDM 2021_5_10_16_9, loss: 4,2,1,0,0, on C+E+H+HE, semi-sup for HE
+# ckpt_timelabel: '2021_5_17_16_46'         # step 3: LDDM 2021_5_17_16_45, loss: 4,2,1,1,1, on C+E+H+HE, semi-sup for HE
+# ckpt_timelabel: '2021_5_17_16_47'         # step 3: LDDM 2021_5_17_16_45, loss: 4,2,1,1,1, on C+E+H+HE, semi-sup for HE, penalty only on C, 905
 
 
 # Simple model
-# ckpt_timelabel: '2021_5_17_21_18'         # step 1: LSSL on C+E+H+HE, 90564
+# ckpt_timelabel: '2021_5_17_23_10'         # step 1: LSSL on C+E+H+HE, 90564
 
 
 # LDD on ADNI + HIV in LAB
-ckpt_timelabel: '2021_5_17_22_1'         # step 1: LSSL on C+E+H+HE, 98350
+# ckpt_timelabel: '2021_5_17_22_1'         # step 1: LSSL, simple
+# ckpt_timelabel: '2021_5_17_23_13'         # step 1: LSSL, normal
+# ckpt_timelabel: '2021_5_17_23_14'         # step 2: LDDM, normal, 98694
+# ckpt_timelabel: '2021_5_17_23_15'         # step 3: LDDM, normal, no kl, 98694
+
+
+# New mapping model, simple
+# ADNI
+# ckpt_timelabel: '2021_5_30_15_4'          # step 1: LSSL
+# ckpt_timelabel: '2021_5_30_15_5'          # step 2: LDD on all, 2,1,1,0,0
+
+# LAB
+# ckpt_timelabel: '2021_5_30_15_0'          # step 1: LSSL
+
+
+# New mapping model, normal
+# ADNI
+# ckpt_timelabel: '2021_5_30_23_52'          # step 1: LSSL
+# ckpt_timelabel: '2021_5_30_23_53'          # step 2: LDD on all, 2,1,1,0,0
+
+# ckpt_timelabel: '2021_5_31_9_7'          # from scratch LDD on all, 2,1,1,0,0
+# ckpt_timelabel: '2021_5_31_9_8'          # from scratch LDD on all, 4,2,1,1,1
+
+ckpt_timelabel: '2021_5_31_18_32'          # from scratch LDD on all, 4,2,1,0,0, with regularization 0.01
+
+ckpt_timelabel: '2021_5_31_18_44'          # LSSL on all, 2,1,0,0,0, with regularization 0.01
+#
+
+# LAB
+# ckpt_timelabel: '2021_5_30_23_53'          # step 1: LSSL
+# ckpt_timelabel: '2021_5_30_23_54'          # step 2: LDDM on all, 2,1,1,0,0
+# ckpt_timelabel: '2021_5_30_23_55'          # step 3: LDDM on all, 4,2,1,1,1
+
+# ckpt_timelabel: '2021_5_31_18_42'          # step 1: LSSL, with regularization 0.01
