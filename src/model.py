@@ -143,24 +143,24 @@ class Encoder(nn.Module):
         # (16,4,4,4)
         return conv4
 
-class Encoder_Var(nn.Module):
-    def __init__(self, in_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
-        super(Encoder_Var, self).__init__()
-
-        self.conv1 = EncoderBlock(in_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-        self.conv2 = EncoderBlock(inter_num_ch, 2*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-        self.conv3 = EncoderBlock(2*inter_num_ch, 4*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-        self.conv4_mean = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-        self.conv4_logvar = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-
-    def forward(self, x):
-        conv1 = self.conv1(x)
-        conv2 = self.conv2(conv1)
-        conv3 = self.conv3(conv2)
-        mean = self.conv4_mean(conv3)
-        logvar = self.conv4_logvar(conv3)
-        # (16,4,4,4)
-        return mean, logvar
+# class Encoder_Var(nn.Module):
+#     def __init__(self, in_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
+#         super(Encoder_Var, self).__init__()
+#
+#         self.conv1 = EncoderBlock(in_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+#         self.conv2 = EncoderBlock(inter_num_ch, 2*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+#         self.conv3 = EncoderBlock(2*inter_num_ch, 4*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+#         self.conv4_mean = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+#         self.conv4_logvar = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+#
+#     def forward(self, x):
+#         conv1 = self.conv1(x)
+#         conv2 = self.conv2(conv1)
+#         conv3 = self.conv3(conv2)
+#         mean = self.conv4_mean(conv3)
+#         logvar = self.conv4_logvar(conv3)
+#         # (16,4,4,4)
+#         return mean, logvar
 
 class Encoder_Simple(nn.Module):
     def __init__(self, inter_num_ch=16):
@@ -301,7 +301,7 @@ class Classifier(nn.Module):
         self.fc = nn.Sequential(
                         # nn.BatchNorm1d(latent_size),
                         # nn.Dropout(0.5),
-                        nn.Dropout(0.2),
+                        # nn.Dropout(0.2),
                         nn.Linear(latent_size, inter_num_ch),
                         nn.LeakyReLU(0.2),
                         # nn.Tanh(),
@@ -348,21 +348,32 @@ class CLS(nn.Module):
         pred = self.classifier(z1)
         return pred
 
-    def compute_classification_loss(self, pred, label, pos_weight=torch.tensor([2.]), postfix='NC_AD'):
-        if postfix == 'C_single':
+    # def compute_classification_loss(self, pred, label, pos_weight=torch.tensor([2.]), postfix='NC_AD'):
+    #     if postfix == 'C_single':
+    #         loss = nn.MSELoss()(pred.squeeze(1), label)
+    #         return loss, pred
+    #     else:
+    #         if  'NC_AD' in postfix:
+    #             label = label / 2
+    #         elif 'pMCI_sMCI' in postfix:
+    #             label = label - 3
+    #         elif 'C_E_HE' in postfix:
+    #             label = (label > 0).double()
+    #         else:
+    #             raise ValueError('Not support!')
+    #         loss = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(self.gpu, dtype=torch.float))(pred.squeeze(1), label)
+    #         return loss, F.sigmoid(pred)
+
+    def compute_loss(self, pred, label, downstream='sMCI_pMCI', pos_weight=None):
+        # pdb.set_trace()
+        if downstream == 'adas' or downstream == 'future_adas':
             loss = nn.MSELoss()(pred.squeeze(1), label)
-            return loss, pred
-        else:
-            if  'NC_AD' in postfix:
-                label = label / 2
-            elif 'pMCI_sMCI' in postfix:
-                label = label - 3
-            elif 'C_E_HE' in postfix:
-                label = (label > 0).double()
-            else:
-                raise ValueError('Not support!')
+        elif downstream == 'sMCI_pMCI' or downstream == 'amyloid':
             loss = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(self.gpu, dtype=torch.float))(pred.squeeze(1), label)
-            return loss, F.sigmoid(pred)
+            pred = F.sigmoid(pred)
+        else:
+            raise ValueError('Not support!')
+        return loss, pred
 
 class AE(nn.Module):
     def __init__(self):
@@ -416,6 +427,8 @@ class VAE(nn.Module):
         # pdb.set_trace()
         kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
         return torch.mean(torch.sum(kl, dim=-1))
+
+
 
 class LSSL(nn.Module):
     def __init__(self, gpu='None', model='normal', is_mapping=False, latent_size=512):
@@ -907,11 +920,9 @@ class LDDM(nn.Module):
 
         try:
             # penalty_loss = torch.mean(torch.abs(delta_z_dd_proj_nc / (delta_z_da_proj_nc+1e-12)))
-            penalty_loss = +torch.mean(torch.abs(delta_z_dd2_proj_nc)) / (torch.mean(torch.abs(delta_z_dd2_proj_dis))+1e-12)
+            penalty_loss += torch.mean(torch.abs(delta_z_dd2_proj_nc)) / (torch.mean(torch.abs(delta_z_dd2_proj_dis))+1e-12)
         except:
             penalty_loss += torch.tensor(0., device=self.gpu)
-
-
 
         return loss_da, loss_dd, kl_loss, penalty_loss
 

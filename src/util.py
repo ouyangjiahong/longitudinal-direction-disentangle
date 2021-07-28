@@ -79,9 +79,18 @@ class LongitudinalPairDataset(Dataset):
         case_id_2 = self.case_id_list[1][idx]
         case_order_1 = self.case_id_list[2][idx]
         case_order_2 = self.case_id_list[3][idx]
-        label = np.array(self.data_noimg[subj_id]['label'])
+        try:
+            label = np.array(self.data_noimg[subj_id]['label'])
+        except:
+            pdb.set_trace()
         # label_all = np.array(self.data_noimg[subj_id]['label_all'])[[case_order_1, case_order_2]]
-        interval = np.array(self.data_noimg[subj_id]['date_interval'][case_order_2] - self.data_noimg[subj_id]['date_interval'][case_order_1])
+        if case_order_2 == case_order_1:
+            try:
+                interval = np.array(self.data_noimg[subj_id]['date_interval'][case_order_1+1] - self.data_noimg[subj_id]['date_interval'][case_order_1])
+            except:
+                interval = np.array(self.data_noimg[subj_id]['date_interval'][case_order_2] - self.data_noimg[subj_id]['date_interval'][case_order_1])
+        else:
+            interval = np.array(self.data_noimg[subj_id]['date_interval'][case_order_2] - self.data_noimg[subj_id]['date_interval'][case_order_1])
         age = np.array(self.data_noimg[subj_id]['age'] + self.data_noimg[subj_id]['date_interval'][case_order_1])
         # print(subj_id, case_order_1, case_order_2, label_all, interval)
         try:
@@ -90,10 +99,22 @@ class LongitudinalPairDataset(Dataset):
             sex = 0
 
         if self.dataset_name == 'ADNI':
-            score = np.array(self.data_noimg[subj_id]['adas'][[case_order_1, case_order_2]])
+            # score = np.array(self.data_noimg[subj_id]['adas'][[case_order_1, case_order_2]])
+            # pdb.set_trace()
+            if case_order_1 < case_order_2:
+                score = np.stack([self.data_noimg[subj_id]['adas'][[case_order_1, case_order_2]],
+                                        self.data_noimg[subj_id]['mmse'][[case_order_1, case_order_2]],
+                                        self.data_noimg[subj_id]['pacc'][[case_order_1, case_order_2]],
+                                        self.data_noimg[subj_id]['pmem'][[case_order_1, case_order_2]]], axis=0)
+            else:
+                score = np.stack([self.data_noimg[subj_id]['adas'][[case_order_1]],
+                                        self.data_noimg[subj_id]['mmse'][[case_order_1]],
+                                        self.data_noimg[subj_id]['pacc'][[case_order_1]],
+                                        self.data_noimg[subj_id]['pmem'][[case_order_1]]], axis=0)
         elif self.dataset_name == 'LAB':
             score = np.concatenate([self.data_noimg[subj_id]['alcohol'][[case_order_1, case_order_2]],
-                                    self.data_noimg[subj_id]['hiv'][[case_order_1, case_order_2]]])
+                                    self.data_noimg[subj_id]['hiv'][[case_order_1, case_order_2]]], axis=1)
+            score = score.reshape(1, -1)
         else:
             score = 0
 
@@ -104,7 +125,8 @@ class LongitudinalPairDataset(Dataset):
         img1 = np.array(self.data_img[subj_id][case_id_1][rand_idx])
         img2 = np.array(self.data_img[subj_id][case_id_2][rand_idx])
 
-        return {'img1': img1, 'img2': img2, 'label': label, 'interval': interval, 'age': age, 'sex': sex, 'score': score}
+        return {'img1': img1, 'img2': img2, 'label': label, 'interval': interval, 'age': age, 'sex': sex, 'score': score,
+                'subj_id': subj_id, 'case_order': np.array([case_order_1, case_order_2])}
 
 class LongitudinalPairDatasetMix(Dataset):
     def __init__(self, dataset_name, data_img_list, data_noimg_list, subj_id_list, case_id_list, dataset_idx_list, aug=False):
@@ -164,14 +186,29 @@ class LongitudinalPairDatasetMix(Dataset):
 class LongitudinalData(object):
     def __init__(self, dataset_name, data_path, img_file_name='ADNI_longitudinal_img.h5',
                 noimg_file_name='ADNI_longitudinal_noimg.h5', subj_list_postfix='NC_AD', data_type='single',
-                aug=False, batch_size=16, num_fold=5, fold=0, shuffle=True, num_workers=0):
+                aug=False, batch_size=16, num_fold=5, fold=0, shuffle=True, num_workers=0, train_all=False):
         if dataset_name == 'ADNI' or dataset_name == 'LAB':
             data_img = h5py.File(os.path.join(data_path, img_file_name), 'r')
             data_noimg = h5py.File(os.path.join(data_path, noimg_file_name), 'r')
 
+            if train_all:
+                subj_id_list_train, case_id_list_train = self.load_idx_list(os.path.join(data_path, 'fold'+str(fold)+'_all_'+subj_list_postfix+'.txt'), data_type)
             subj_id_list_train, case_id_list_train = self.load_idx_list(os.path.join(data_path, 'fold'+str(fold)+'_train_'+subj_list_postfix+'.txt'), data_type)
             subj_id_list_val, case_id_list_val = self.load_idx_list(os.path.join(data_path, 'fold'+str(fold)+'_val_'+subj_list_postfix+'.txt'), data_type)
             subj_id_list_test, case_id_list_test = self.load_idx_list(os.path.join(data_path, 'fold'+str(fold)+'_test_'+subj_list_postfix+'.txt'), data_type)
+
+            # pdb.set_trace()
+            # idx_test_list = np.random.choice(len(subj_id_list_train), size=int(0.2*len(subj_id_list_train)), replace=False).reshape(-1)
+            # case_id_list_train = np.array(case_id_list_train)#.transpose([1,0])
+            # subj_id_list_test, case_id_list_test = subj_id_list_train[idx_test_list], case_id_list_train[:,idx_test_list]
+            # subj_id_list_val, case_id_list_val = subj_id_list_test, case_id_list_test
+            # idx_train_list = np.setdiff1d(np.arange(len(subj_id_list_train)), idx_test_list)
+            # case_id_list_train, subj_id_list_train = case_id_list_train[:,idx_train_list], subj_id_list_train[idx_train_list]
+
+            # ordered data
+            # subj_id_list_train, case_id_list_train = self.load_idx_list(os.path.join(data_path, 'fold'+str(fold)+'_train_'+subj_list_postfix+'_order.txt'), data_type)
+            # subj_id_list_val, case_id_list_val = self.load_idx_list(os.path.join(data_path, 'fold'+str(fold)+'_val_'+subj_list_postfix+'_order.txt'), data_type)
+            # subj_id_list_test, case_id_list_test = self.load_idx_list(os.path.join(data_path, 'fold'+str(fold)+'_test_'+subj_list_postfix+'_order.txt'), data_type)
 
             if data_type == 'single':
                 train_dataset = CrossSectionalDataset(dataset_name, data_img, data_noimg, subj_id_list_train, case_id_list_train, aug=aug)
@@ -312,25 +349,28 @@ def save_checkpoint(state, is_best, checkpoint_dir):
         shutil.copyfile(filename, checkpoint_dir+'/model_best.pth.tar')
         print('save best')
 
-def compute_classification_metrics(label, pred, postfix='NC_AD'):
-    if postfix == 'C_single':
+def compute_metrics(label, pred, downstream='sMCI_pMCI'):
+    # regression
+    if downstream == 'adas' or downstream == 'future_adas':
         # pdb.set_trace()
         r2 = sklearn.metrics.r2_score(label, pred)
-        label = label * 17.6 + 47.3
-        pred = pred * 17.6 + 47.3
+        if downstream == 'adas':
+            label = label * 7.67 + 11.33
+            pred = pred * 7.67 + 11.33
+        if downstream == 'future_adas':
+            label = label * 6.55 + 2.04
+            pred = pred * 6.55 + 2.04
         mse = sklearn.metrics.mean_squared_error(label, pred, squared=False)
         mae = np.abs(pred - label).mean()
-        print(mse, r2, mae)
+        print('MSE=', mse, ', R2=', r2, ', MAE=', mae)
         return r2
-    else:
+    # classification
+    elif downstream == 'amyloid' or downstream == 'pMCI_sMCI':
         pred_bi = (pred>0.5).squeeze(1)
-        if 'NC_AD' in postfix:
-            classes = [0,2]
-        elif 'pMCI_sMCI' in postfix:
-            classes = [3,4]
-        elif 'C_E_HE' in postfix:
-            label = (label > 0)
+        if downstream == 'amyloid':
             classes = [0,1]
+        elif downstream == 'pMCI_sMCI':
+            classes = [3,4]
         tp = np.sum(np.logical_and(label==classes[1], pred_bi==1))
         fp = np.sum(np.logical_and(label==classes[0], pred_bi==1))
         tn = np.sum(np.logical_and(label==classes[0], pred_bi==0))
@@ -339,10 +379,10 @@ def compute_classification_metrics(label, pred, postfix='NC_AD'):
         sen = tp/(tp+fn)
         spe = tn/(tn+fp)
         bacc = 0.5 * (sen + spe)
-        print(auc, bacc, sen, spe)
+        print('AUC=', auc, ', BACC=', bacc, ', SEN=', sen, ', SPE=', spe)
         return bacc
 
-def compute_average_brain_no_disease(path, model, da, z_list, age_list, age_thres=[60,85], age_interval=5):
+def compute_average_brain_no_disease(path, model, da, z_list, age_list, age_thres=[60,85], age_interval=5, is_mapping=False):
     idx_list = np.logical_and(age_list>age_thres[0], age_list<age_thres[1])
     z_list = z_list[idx_list]
     age_list = age_list[idx_list]
@@ -362,11 +402,15 @@ def compute_average_brain_no_disease(path, model, da, z_list, age_list, age_thre
         z_mean = da_age * da_norm + proj_other_mean
         z_mean_age_list.append(z_mean)
     z_mean_list = np.concatenate(z_mean_age_list, 0)
-    recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
+    if is_mapping:
+        z_mean_list_map = model.mapping_dec(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
+        recons = model.decoder(z_mean_list_map)
+    else:
+        recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
     recons = recons.view(1, -1, 64, 64, 64).detach().cpu().numpy()
     np.save(path, recons)
 
-def compute_average_brain_one_disease(path, model, da, dd, z_list, label_list, age_list, age_thres=[60,85], age_interval=5):
+def compute_average_brain_one_disease(path, model, da, dd, z_list, label_list, age_list, age_thres=[60,85], age_interval=5, is_mapping=False):
     idx_list = np.logical_and(age_list>age_thres[0], age_list<age_thres[1])
     z_list = z_list[idx_list]
     label_list = label_list[idx_list]
@@ -399,16 +443,21 @@ def compute_average_brain_one_disease(path, model, da, dd, z_list, label_list, a
 
         z_mean_age_list = []
         for age in range(age_thres[0], age_thres[1]+1, age_interval):
-            da_age = (age - age_thres[0]) / (age_thres[1] - age_thres[0]) * (da_max - da_min) + da_min
+            da_age = (age - age_min) / (age_max - age_min) * (da_max - da_min) + da_min
+            # da_age = (age - age_thres[0]) / (age_thres[1] - age_thres[0]) * (da_max - da_min) + da_min
             z_mean = da_age * da_norm + proj_other_cls_mean + proj_dd_cls_mean
             z_mean_age_list.append(z_mean)
         z_mean_list.append(np.concatenate(z_mean_age_list, 0))
     z_mean_list = np.stack(z_mean_list, 0)
-    recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
+    if is_mapping:
+        z_mean_list_map = model.mapping_dec(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
+        recons = model.decoder(z_mean_list_map)
+    else:
+        recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
     recons = recons.view(len(label_class), -1, 64, 64, 64).detach().cpu().numpy()
     np.save(path, recons)
 
-def compute_average_brain_two_disease(path, model, da, dd, z_list, label_list, age_list, label_cls, age_thres=[60,85], age_interval=5):
+def compute_average_brain_two_disease(path, model, da, dd, z_list, label_list, age_list, label_cls, age_thres=[60,85], age_interval=5, is_mapping=False):
     idx_list = np.logical_and(age_list>age_thres[0], age_list<age_thres[1])
     z_list = z_list[idx_list]
     label_list = label_list[idx_list]
@@ -460,11 +509,16 @@ def compute_average_brain_two_disease(path, model, da, dd, z_list, label_list, a
 
         z_mean_age_list = []
         for age in range(age_thres[0], age_thres[1]+1, age_interval):
-            da_age = (age - age_thres[0]) / (age_thres[1] - age_thres[0]) * (da_max - da_min) + da_min
+            da_age = (age - age_min) / (age_max - age_min) * (da_max - da_min) + da_min
+            # da_age = (age - age_thres[0]) / (age_thres[1] - age_thres[0]) * (da_max - da_min) + da_min
             z_mean = da_age * da_norm + proj_other_cls_mean + proj_dd1_cls_mean + proj_dd2_cls_mean
             z_mean_age_list.append(z_mean)
         z_mean_list.append(np.concatenate(z_mean_age_list, 0))
     z_mean_list = np.stack(z_mean_list, 0)
-    recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
+    if is_mapping:
+        z_mean_list_map = model.mapping_dec(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
+        recons = model.decoder(z_mean_list_map)
+    else:
+        recons = model.decoder(torch.Tensor(z_mean_list).to(model.gpu).view(-1, z_mean_list.shape[-1]))
     recons = recons.view(len(label_class), -1, 64, 64, 64).detach().cpu().numpy()
     np.save(path, recons)

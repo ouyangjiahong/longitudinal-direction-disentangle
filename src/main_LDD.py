@@ -255,6 +255,8 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
     age_list = []
     sex_list = []
     score_list = []
+    subj_id_list = []
+    case_order_list = []
 
     with torch.no_grad():
         for iter, sample in tqdm.tqdm(enumerate(loader, 0)):
@@ -316,6 +318,9 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
                 label_list.append(label.detach().cpu().numpy())
                 sex_list.append(sample['sex'].numpy())
                 score_list.append(sample['score'].numpy())
+                subj_id_list.append(sample['subj_id'])
+                case_order_list.append(sample['case_order'].numpy())
+                # pdb.set_trace()
 
             # if iter > 2:
             #     break
@@ -336,6 +341,8 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             label_list = np.concatenate(label_list, axis=0)
             sex_list = np.concatenate(sex_list, axis=0)
             score_list = np.concatenate(score_list, axis=0)
+            case_order_list = np.concatenate(case_order_list, axis=0)
+            subj_id_list = np.concatenate(subj_id_list, axis=0)
             if config['model_name'] == 'LSSL':
                 da = model.compute_directions()
                 dd = da
@@ -353,29 +360,36 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             h5_file.create_dataset('age', data=age_list)
             h5_file.create_dataset('sex', data=sex_list)
             h5_file.create_dataset('score', data=score_list)
+            h5_file.create_dataset('case_order', data=case_order_list)
+            pdb.set_trace()
+            h5_file.create_dataset('subj_id', data=[np.string_(subj_id) for subj_id in subj_id_list])
             h5_file.create_dataset('da', data=da.detach().cpu().numpy())
             h5_file.create_dataset('dd', data=dd.detach().cpu().numpy())
+
 
             # save simulated average brain
             path = os.path.join(res_path, 'average_brain.npy')
             if config['dataset_name'] == 'ADNI':
-                age_thres = [60, 85]
-                age_interval = 5
+                age_thres = [30, 120]
+                age_interval = 10
             elif config['dataset_name'] == 'LAB':
-                age_thres = [30, 80]
+                age_thres = [20, 120]
                 age_interval = 10
             elif config['dataset_name'] == 'ADNI_LAB':
                 age_thres = [20, 90]
                 age_interval = 10
             if config['model_name'] == 'LSSL':
                 compute_average_brain_no_disease(path, model, da.detach().cpu().numpy(),
-                                        z1_list, age_list, age_thres=age_thres, age_interval=age_interval)
+                                        z1_list, age_list, age_thres=age_thres,
+                                        age_interval=age_interval, is_mapping=config['is_mapping'])
             elif config['model_name'] == 'LDD':
                 compute_average_brain_one_disease(path, model, da.detach().cpu().numpy(), dd.detach().cpu().numpy(),
-                                        z1_list, label_list, age_list, age_thres=age_thres, age_interval=age_interval)
+                                        z1_list, label_list, age_list, age_thres=age_thres,
+                                        age_interval=age_interval, is_mapping=config['is_mapping'])
             elif config['model_name'] == 'LDDM':
                 compute_average_brain_two_disease(path, model, da.detach().cpu().numpy(), dd.detach().cpu().numpy(),
-                                        z1_list, label_list, age_list, label_cls=config['label_list'], age_thres=age_thres, age_interval=age_interval)
+                                        z1_list, label_list, age_list, label_cls=config['label_list'],
+                                        age_thres=age_thres, age_interval=age_interval, is_mapping=config['is_mapping'])
 
     return loss_all_dict
 
@@ -383,5 +397,6 @@ if config['phase'] == 'train':
     train()
 else:
     stat = evaluate(phase='test', set='train', save_res=True, info='')
+    # stat = evaluate(phase='test', set='train', save_res=True, info='_order')
     # stat = evaluate(phase='test', set='test', save_res=True, info='')
     print(stat)
