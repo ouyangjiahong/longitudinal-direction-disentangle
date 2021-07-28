@@ -99,26 +99,26 @@ class DecoderBlock(nn.Module):
         return self.conv(x)
 
 
-class Encoder_var(nn.Module):
-    def __init__(self, in_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
-        super(Encoder_var, self).__init__()
-
-        self.conv1 = EncoderBlock(in_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-        self.conv2 = EncoderBlock(inter_num_ch, 2*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-        self.conv3 = EncoderBlock(2*inter_num_ch, 4*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-        self.conv4 = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-        self.mu = nn.Conv3d(inter_num_ch, inter_num_ch, kernel_size=kernel_size, padding=1)
-        self.log_var = nn.Conv3d(inter_num_ch, inter_num_ch, kernel_size=kernel_size, padding=1)
-
-    def forward(self, x):
-        conv1 = self.conv1(x)
-        conv2 = self.conv2(conv1)
-        conv3 = self.conv3(conv2)
-        conv4 = self.conv4(conv3)
-        mu = self.mu(conv4)
-        log_var = self.log_var(conv4)
-        # (16,4,4,4)
-        return mu.view(x.shape[0], -1), log_var.view(x.shape[0], -1)
+# class Encoder_var(nn.Module):
+#     def __init__(self, in_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
+#         super(Encoder_var, self).__init__()
+#
+#         self.conv1 = EncoderBlock(in_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+#         self.conv2 = EncoderBlock(inter_num_ch, 2*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+#         self.conv3 = EncoderBlock(2*inter_num_ch, 4*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+#         self.conv4 = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+#         self.mu = nn.Conv3d(inter_num_ch, inter_num_ch, kernel_size=kernel_size, padding=1)
+#         self.log_var = nn.Conv3d(inter_num_ch, inter_num_ch, kernel_size=kernel_size, padding=1)
+#
+#     def forward(self, x):
+#         conv1 = self.conv1(x)
+#         conv2 = self.conv2(conv1)
+#         conv3 = self.conv3(conv2)
+#         conv4 = self.conv4(conv3)
+#         mu = self.mu(conv4)
+#         log_var = self.log_var(conv4)
+#         # (16,4,4,4)
+#         return mu.view(x.shape[0], -1), log_var.view(x.shape[0], -1)
 
 class Encoder(nn.Module):
     def __init__(self, in_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2, dropout=False):
@@ -143,24 +143,24 @@ class Encoder(nn.Module):
         # (16,4,4,4)
         return conv4
 
-# class Encoder_Var(nn.Module):
-#     def __init__(self, in_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
-#         super(Encoder_Var, self).__init__()
-#
-#         self.conv1 = EncoderBlock(in_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-#         self.conv2 = EncoderBlock(inter_num_ch, 2*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-#         self.conv3 = EncoderBlock(2*inter_num_ch, 4*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-#         self.conv4_mean = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-#         self.conv4_logvar = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
-#
-#     def forward(self, x):
-#         conv1 = self.conv1(x)
-#         conv2 = self.conv2(conv1)
-#         conv3 = self.conv3(conv2)
-#         mean = self.conv4_mean(conv3)
-#         logvar = self.conv4_logvar(conv3)
-#         # (16,4,4,4)
-#         return mean, logvar
+class Encoder_Var(nn.Module):
+    def __init__(self, in_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
+        super(Encoder_Var, self).__init__()
+
+        self.conv1 = EncoderBlock(in_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+        self.conv2 = EncoderBlock(inter_num_ch, 2*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+        self.conv3 = EncoderBlock(2*inter_num_ch, 4*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+        self.conv4_mean = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+        self.conv4_logvar = EncoderBlock(4*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+
+    def forward(self, x):
+        conv1 = self.conv1(x)
+        conv2 = self.conv2(conv1)
+        conv3 = self.conv3(conv2)
+        mean = self.conv4_mean(conv3)
+        logvar = self.conv4_logvar(conv3)
+        # (16,4,4,4)
+        return mean, logvar
 
 class Encoder_Simple(nn.Module):
     def __init__(self, inter_num_ch=16):
@@ -218,17 +218,20 @@ class Encoder_Simple_Mapping(nn.Module):
         return z_flatten_map
 
 class Decoder(nn.Module):
-    def __init__(self, out_num_ch=1, img_size=(64,64,64), inter_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
+    def __init__(self, out_num_ch=1, img_size=(64,64,64), inter_num_ch=16, in_num_ch=16, kernel_size=3, conv_act='leaky_relu', num_conv=2):
         super(Decoder, self).__init__()
 
-        self.conv4 = DecoderBlock(inter_num_ch, 4*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
+        self.conv4 = DecoderBlock(in_num_ch, 4*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
         self.conv3 = DecoderBlock(4*inter_num_ch, 2*inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
         self.conv2 = DecoderBlock(2*inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
         self.conv1 = DecoderBlock(inter_num_ch, inter_num_ch, kernel_size=kernel_size, conv_act=conv_act, dropout=0, num_conv=num_conv)
         self.conv0 = nn.Conv3d(inter_num_ch, out_num_ch, kernel_size=3, padding=1)
 
     def forward(self, x):
-        x_reshaped = x.view(x.shape[0], 16, 4, 4, 4)
+        if len(x.shape) < 5:
+            x_reshaped = x.view(x.shape[0], 16, 4, 4, 4)
+        else:
+            x_reshaped = x
         conv4 = self.conv4(x_reshaped)
         conv3 = self.conv3(conv4)
         conv2 = self.conv2(conv3)
@@ -428,7 +431,43 @@ class VAE(nn.Module):
         kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
         return torch.mean(torch.sum(kl, dim=-1))
 
+class CVAE(nn.Module):
+    def __init__(self):
+        super(CVAE, self).__init__()
+        self.encoder = Encoder_Var(in_num_ch=2, inter_num_ch=16, num_conv=1)
+        self.decoder = Decoder(out_num_ch=1, inter_num_ch=16, in_num_ch=17, num_conv=1)
 
+    def forward(self, img1, img2, interval, label):
+        bs = img1.shape[0]
+        input1 = torch.cat([img1, label.reshape(-1,1,1,1,1).repeat(1,1,64,64,64)], 1)
+        input2 = torch.cat([img2, label.reshape(-1,1,1,1,1).repeat(1,1,64,64,64)], 1)
+        zs_mu, zs_logvar = self.encoder(torch.cat([input1, input2], 0))
+        zs = self._sample(zs_mu, zs_logvar)
+        # zs = zs.reshape(bs*2, 16, 4, 4, 4)
+        zs_cond = torch.cat([zs, label.reshape(-1,1,1,1,1).repeat(2,1,4,4,4)], 1)
+        recons = self.decoder(zs_cond)
+        zs_flatten = zs.view(bs*2, -1)
+        z1, z2 = zs_flatten[:bs], zs_flatten[bs:]
+        recon1, recon2 = recons[:bs], recons[bs:]
+        return [z1, z2, zs_mu.view(bs*2, -1), zs_logvar.view(bs*2, -1)], [recon1, recon2]
+
+    def _sample(self, mu, logvar):
+        if self.training:
+            std = torch.exp(0.5 * logvar)
+            eps = torch.randn_like(std)
+            return eps * std + mu
+        else:
+            return mu
+
+    # reconstruction loss
+    def compute_recon_loss(self, x, recon):
+        return torch.mean((x - recon) ** 2)
+
+    # kl loss
+    def compute_kl_loss(self, mu, logvar):
+        # pdb.set_trace()
+        kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+        return torch.mean(torch.sum(kl, dim=-1))
 
 class LSSL(nn.Module):
     def __init__(self, gpu='None', model='normal', is_mapping=False, latent_size=512):

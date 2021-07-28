@@ -69,6 +69,8 @@ elif config['model_name'] == 'AE':
     model = AE().to(config['device'])
 elif config['model_name'] == 'VAE':
     model = VAE().to(config['device'])
+elif config['model_name'] == 'CVAE':
+    model = CVAE().to(config['device'])
 elif config['model_name'] == 'LSSL':
     model = LSSL(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] in ['LSP']:
@@ -123,7 +125,10 @@ def train():
                 break
 
             # run model
-            zs, recons = model(img1, img2, interval)
+            if config['model_name'] == 'CVAE':
+                zs, recons = model(img1, img2, interval, (label>0).float())
+            else:
+                zs, recons = model(img1, img2, interval)
 
             # loss
             loss = 0
@@ -266,7 +271,10 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             interval = sample['interval'].to(config['device'], dtype=torch.float)
 
             # run model
-            zs, recons = model(img1, img2, interval)
+            if config['model_name'] == 'CVAE':
+                zs, recons = model(img1, img2, interval, (label>0).float())
+            else:
+                zs, recons = model(img1, img2, interval)
 
             # loss
             loss = 0
