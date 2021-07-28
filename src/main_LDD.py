@@ -75,6 +75,8 @@ elif config['model_name'] == 'LSSL':
     model = LSSL(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] == 'wLSSL1':
     model = wLSSL1(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
+elif config['model_name'] == 'wLSSL2':
+    model = wLSSL2(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] in ['LSP']:
     model = LSP(gpu=config['device']).to(config['device'])
 else:
@@ -150,7 +152,7 @@ def train():
             else:
                 loss_cls = torch.tensor(0.)
 
-            if (config['model_name'] == 'LDD' or config['model_name'] == 'LDDM') and (config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0):
+            if (config['model_name'] in ['LDD', 'LDDM']) and (config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0):
                 loss_dir_a, loss_dir_d, loss_kl, loss_penalty = model.compute_direction_loss(zs, label, interval)
                 if config['lambda_dir_a'] > 0:
                     loss += config['lambda_dir_a'] * loss_dir_a
@@ -160,8 +162,11 @@ def train():
                     loss += config['lambda_kl'] * loss_kl
                 if config['lambda_penalty'] > 0:
                     loss += config['lambda_penalty'] * loss_penalty
-            elif config['model_name'] == 'LSSL' and config['lambda_dir_a'] > 0:
-                loss_dir_a = model.compute_direction_loss(zs)
+            elif config['model_name'] in ['LSSL', 'wLSSL1', 'wLSSL2'] and config['lambda_dir_a'] > 0:
+                if config['model_name'] == 'wLSSL2':
+                    loss_dir_a = model.compute_direction_loss(zs, label)
+                else:
+                    loss_dir_a = model.compute_direction_loss(zs)
                 loss += config['lambda_dir_a'] * loss_dir_a
                 loss_dir_d = torch.tensor(0.)
                 loss_kl = torch.tensor(0.)
@@ -311,7 +316,7 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             else:
                 loss_cls = torch.tensor(0.)
 
-            if (config['model_name'] == 'LDD' or config['model_name'] == 'LDDM') and (config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0):
+            if (config['model_name'] in ['LDD', 'LDDM']) and (config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0):
                 loss_dir_a, loss_dir_d, loss_kl, loss_penalty = model.compute_direction_loss(zs, label, interval)
                 if config['lambda_dir_a'] > 0:
                     loss += config['lambda_dir_a'] * loss_dir_a
@@ -321,8 +326,11 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
                     loss += config['lambda_kl'] * loss_kl
                 if config['lambda_penalty'] > 0:
                     loss += config['lambda_penalty'] * loss_penalty
-            elif config['model_name'] == 'LSSL' and config['lambda_dir_a'] > 0:
-                loss_dir_a = model.compute_direction_loss(zs)
+            elif config['model_name'] in ['LSSL', 'wLSSL1', 'wLSSL2'] and config['lambda_dir_a'] > 0:
+                if config['model_name'] == 'wLSSL2':
+                    loss_dir_a = model.compute_direction_loss(zs, label)
+                else:
+                    loss_dir_a = model.compute_direction_loss(zs)
                 loss += config['lambda_dir_a'] * loss_dir_a
                 loss_dir_d = torch.tensor(0.)
                 loss_kl = torch.tensor(0.)
