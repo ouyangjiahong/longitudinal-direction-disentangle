@@ -73,6 +73,8 @@ elif config['model_name'] == 'CVAE':
     model = CVAE().to(config['device'])
 elif config['model_name'] == 'LSSL':
     model = LSSL(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
+elif config['model_name'] == 'wLSSL1':
+    model = wLSSL1(gpu=config['device'], model=config['enc_dec_type'], is_mapping=config['is_mapping'], latent_size=config['latent_size']).to(config['device'])
 elif config['model_name'] in ['LSP']:
     model = LSP(gpu=config['device']).to(config['device'])
 else:
@@ -111,7 +113,7 @@ def train():
 
     for epoch in range(start_epoch+1, config['epochs']):
         model.train()
-        loss_all_dict = {'all': 0, 'recon': 0., 'dir_a': 0., 'dir_d': 0., 'kl': 0., 'penalty': 0., 'reg': 0.}
+        loss_all_dict = {'all': 0, 'recon': 0., 'dir_a': 0., 'dir_d': 0., 'kl': 0., 'penalty': 0., 'reg': 0., 'cls': 0.}
         global_iter0 = global_iter
         for iter, sample in enumerate(trainDataLoader, 0):
             global_iter += 1
@@ -125,8 +127,12 @@ def train():
                 break
 
             # run model
-            if config['model_name'] == 'CVAE':
-                zs, recons = model(img1, img2, interval, (label>0).float())
+            if config['model_name'] in ['VAE', 'CVAE']:
+                if config['model_name'] == 'VAE':
+                    zs, recons = model(img1, img2, interval)
+                else:
+                    zs, recons = model(img1, img2, interval, (label>0).float())
+                zs, zs_mu, zs_logvar = zs[:2], zs[2], zs[3]
             else:
                 zs, recons = model(img1, img2, interval)
 
@@ -137,6 +143,12 @@ def train():
                 loss += config['lambda_recon'] * loss_recon
             else:
                 loss_recon = torch.tensor(0.)
+
+            if config['lambda_cls'] > 0:
+                loss_cls = model.compute_classification_loss(zs, (label>0).float())
+                loss += config['lambda_cls'] * loss_cls
+            else:
+                loss_cls = torch.tensor(0.)
 
             if (config['model_name'] == 'LDD' or config['model_name'] == 'LDDM') and (config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0):
                 loss_dir_a, loss_dir_d, loss_kl, loss_penalty = model.compute_direction_loss(zs, label, interval)
@@ -157,7 +169,11 @@ def train():
             else:
                 loss_dir_a = torch.tensor(0.)
                 loss_dir_d = torch.tensor(0.)
-                loss_kl = torch.tensor(0.)
+                if config['model_name'] in ['VAE', 'CVAE']:
+                    loss_kl = model.compute_kl_loss(zs_mu, zs_logvar)
+                    loss += config['lambda_kl'] * loss_kl
+                else:
+                    loss_kl = torch.tensor(0.)
                 loss_penalty = torch.tensor(0.)
 
             if config['lambda_reg'] > 0 and config['is_mapping']:
@@ -177,6 +193,7 @@ def train():
             loss_all_dict['kl'] += loss_kl.item()
             loss_all_dict['penalty'] += loss_penalty.item()
             loss_all_dict['reg'] += loss_reg.item()
+            loss_all_dict['cls'] += loss_cls.item()
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -191,8 +208,8 @@ def train():
             optimizer.zero_grad()
 
             if global_iter % 1 == 0:
-                print('Epoch[%3d], iter[%3d]: loss=[%.4f], recon=[%.4f], dir_a=[%.4f], dir_d=[%.4f], kl=[%.4f], penalty=[%.4f], reg=[%.4f]' \
-                        % (epoch, iter, loss.item(), loss_recon.item(), loss_dir_a.item(), loss_dir_d.item(), loss_kl.item(), loss_penalty.item(), loss_reg.item()))
+                print('Epoch[%3d], iter[%3d]: loss=[%.4f], recon=[%.4f], dir_a=[%.4f], dir_d=[%.4f], kl=[%.4f], penalty=[%.4f], reg=[%.4f], cls=[%.4f]' \
+                        % (epoch, iter, loss.item(), loss_recon.item(), loss_dir_a.item(), loss_dir_d.item(), loss_kl.item(), loss_penalty.item(), loss_reg.item(), loss_cls.item()))
 
             # if iter > 2:
             #     break
@@ -248,7 +265,7 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
         # raise ValueError('Exist results')
         os.remove(path)
 
-    loss_all_dict = {'all': 0, 'recon': 0., 'dir_a': 0., 'dir_d': 0., 'kl': 0., 'penalty': 0.}
+    loss_all_dict = {'all': 0, 'recon': 0., 'dir_a': 0., 'dir_d': 0., 'kl': 0., 'penalty': 0., 'cls': 0.}
     img1_list = []
     img2_list = []
     label_list = []
@@ -271,8 +288,12 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             interval = sample['interval'].to(config['device'], dtype=torch.float)
 
             # run model
-            if config['model_name'] == 'CVAE':
-                zs, recons = model(img1, img2, interval, (label>0).float())
+            if config['model_name'] in ['VAE', 'CVAE']:
+                if config['model_name'] == 'VAE':
+                    zs, recons = model(img1, img2, interval)
+                else:
+                    zs, recons = model(img1, img2, interval, (label>0).float())
+                zs, zs_mu, zs_logvar = zs[:2], zs[2], zs[3]
             else:
                 zs, recons = model(img1, img2, interval)
 
@@ -283,6 +304,12 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
                 loss += config['lambda_recon'] * loss_recon
             else:
                 loss_recon = torch.tensor(0.)
+
+            if config['lambda_cls'] > 0:
+                loss_cls = model.compute_classification_loss(zs, (label>0).float())
+                loss += config['lambda_cls'] * loss_cls
+            else:
+                loss_cls = torch.tensor(0.)
 
             if (config['model_name'] == 'LDD' or config['model_name'] == 'LDDM') and (config['lambda_dir_a'] > 0 or config['lambda_dir_d'] > 0 or config['lambda_kl'] > 0):
                 loss_dir_a, loss_dir_d, loss_kl, loss_penalty = model.compute_direction_loss(zs, label, interval)
@@ -303,7 +330,12 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             else:
                 loss_dir_a = torch.tensor(0.)
                 loss_dir_d = torch.tensor(0.)
-                loss_kl = torch.tensor(0.)
+                # pdb.set_trace()
+                if config['model_name'] in ['VAE', 'CVAE']:
+                    loss_kl = model.compute_kl_loss(zs_mu, zs_logvar)
+                    loss += config['lambda_kl'] * loss_kl
+                else:
+                    loss_kl = torch.tensor(0.)
                 loss_penalty = torch.tensor(0.)
 
             loss_all_dict['all'] += loss.item()
@@ -312,6 +344,7 @@ def evaluate(phase='val', set='val', save_res=True, info=''):
             loss_all_dict['dir_d'] += loss_dir_d.item()
             loss_all_dict['kl'] += loss_kl.item()
             loss_all_dict['penalty'] += loss_kl.item()
+            loss_all_dict['cls'] += loss_cls.item()
 
 
             if phase == 'test' and save_res:

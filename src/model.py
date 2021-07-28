@@ -527,6 +527,71 @@ class LSSL(nn.Module):
         da_vec = self.direction(torch.ones(1, 1).to(self.gpu))   # (1024,)
         return da_vec
 
+class wLSSL1(nn.Module):
+    def __init__(self, gpu='None', model='normal', is_mapping=False, latent_size=512):
+        super(wLSSL1, self).__init__()
+        if model == 'normal':
+            self.encoder = Encoder(in_num_ch=1, inter_num_ch=16, num_conv=1)
+            self.decoder = Decoder(out_num_ch=1, inter_num_ch=16, num_conv=1)
+        elif model == 'simple':
+            self.encoder = Encoder_Simple()
+            self.decoder = Decoder_Simple()
+        else:
+            raise ValueError('Do not support other encoder-decoder model!')
+        self.weak_classifier = Classifier(latent_size=latent_size, inter_num_ch=64)
+        self.is_mapping = is_mapping
+        if self.is_mapping:
+            self.mapping_enc = nn.Sequential(
+                                nn.Flatten(),
+                                nn.Linear(1024, latent_size),
+                                nn.Tanh())
+            self.mapping_dec = nn.Sequential(
+                                nn.Linear(latent_size, 1024),
+                                nn.Tanh())
+        self.direction = nn.Linear(1, latent_size)
+        self.gpu = gpu
+
+    def forward(self, img1, img2, interval):
+        bs = img1.shape[0]
+        zs = self.encoder(torch.cat([img1, img2], 0))
+        if self.is_mapping:
+            zs = self.mapping_enc(zs)
+        zs_flatten = zs.view(bs*2, -1)
+        z1, z2 = zs_flatten[:bs], zs_flatten[bs:]
+
+        if self.is_mapping:
+            zs = self.mapping_dec(zs)
+        recons = self.decoder(zs)
+
+        recon1, recon2 = recons[:bs], recons[bs:]
+        return [z1, z2], [recon1, recon2]
+
+    # classification loss
+    def compute_classification_loss(self, zs, label):
+        pred = self.weak_classifier(torch.cat(zs, 0))
+        loss = nn.BCEWithLogitsLoss()(pred.squeeze(1), label.repeat(2))
+        return loss
+
+    # reconstruction loss
+    def compute_recon_loss(self, x, recon):
+        return torch.mean((x - recon) ** 2)
+
+    # direction loss
+    def compute_direction_loss(self, zs):
+        z1, z2 = zs[0], zs[1]
+        bs = z1.shape[0]
+        delta_z = z2 - z1
+        delta_z_norm = torch.norm(delta_z, dim=1) + 1e-12
+        d_vec = self.direction(torch.ones(bs, 1).to(self.gpu))
+        d_vec_norm = torch.norm(d_vec, dim=1) + 1e-12
+        cos = torch.sum(delta_z * d_vec, 1) / (delta_z_norm * d_vec_norm)
+        return (1. - cos).mean()
+
+    def compute_directions(self):
+        # pdb.set_trace()
+        da_vec = self.direction(torch.ones(1, 1).to(self.gpu))   # (1024,)
+        return da_vec
+
 class LSP(nn.Module):
     def __init__(self, model_name='LSP', latent_size=1024, num_neighbours=3, agg_method='gaussain', gpu=None):
         super(LSP, self).__init__()
