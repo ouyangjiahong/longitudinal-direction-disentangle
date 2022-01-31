@@ -75,16 +75,16 @@ num_neighbours: 5
 agg_method: 'gaussian'
 
 # model_name: 'LDDM'
-# model_name: 'LDD'       ####################
-model_name: 'LSSL'       # longitudinal direction disentangle
+model_name: 'LDD'       ####################
+# model_name: 'LSSL'       # longitudinal direction disentangle
 # model_name: 'CLS'       # encoder + classifier
-lambda_recon: 2.
-lambda_dir_a: 1.
-lambda_dir_d: 0.
+lambda_recon: 4.
+lambda_dir_a: 2.
+lambda_dir_d: 1.
 lambda_cls: 0.
-lambda_kl: 0.
-lambda_penalty: 0.      ###################
-lambda_reg: 0.1
+lambda_kl: 1.
+lambda_penalty: 1.      ###################
+lambda_reg: 0.
 
 lambda_dir: 0.
 lambda_dis: 0.
